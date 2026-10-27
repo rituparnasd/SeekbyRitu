@@ -15,3 +15,7 @@ Verified in Chromium at 375, 390 and 430 CSS pixels: sidebar height below 110px,
 ## Enrollment and calendar update
 
 Chromium workflow checks passed: no language selector, fictional lead registration and persistence, original 30-question submission and read-only submitted entries, payment/plan activation prerequisites, ten generated calls, hold removal and resume restoration, coach practice assignment, per-window tick controls, sequential daily material gating including scheduled-day restriction, and mobile horizontal overflow. No runtime errors in the exercised flows. No real email, payment, secure account or external calendar integration was tested or claimed.
+
+## Today’s Work regression
+
+Verified derived plan tasks and three-day deadlines, work-block calendar entries, four-slot offers, client walkthrough booking, walkthrough completion, next-day programme scheduling with ten calls, one draft per email event across reloads, failed-email task creation and simulated retry, preservation of existing intake text and mobile overflow. The browser test is retained as `tests/tasks.cjs` and runs with `npm test` using local Chromium. No external message was sent and no real financial transaction or production account activation occurred.

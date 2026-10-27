@@ -70,3 +70,17 @@ The interface is now English-only with Title Case navigation. Existing saved jou
 - **Resources:** 30 daily assignments, coach-editable content and completion requirements; optional coach review. Clients cannot see later titles/content until the programme day and previous completion permit access. Learning, application and outcome fields are required for completion. These remain separate from both journals. New leads currently receive illustrative draft material, which must be replaced/approved by the coach before production use.
 
 These are interactive local demo workflows, not a production automation service. The original logo image remains unavailable as a file despite being visible in chat; the temporary text signature is not the original logo. Production authentication, database isolation, automated email/report jobs, payment verification, private files and verified signing remain required before real enrollment.
+
+## Today’s Work and event-driven demo tasks
+
+The coach landing screen now shows Overdue, Due Today, Upcoming Tasks, Waiting On Client, and upcoming calendar events. Tasks are derived from current enrollment state, so completing a stage removes its next-action task without creating duplicates. A submitted questionnaire creates a three-calendar-day plan deadline automatically. The coach can revise the deadline and schedule a timed plan work block on the internal calendar; deadlines are visible as nonblocking calendar entries.
+
+Marking the plan ready unlocks four-slot offer controls. A client chooses one available 30-minute walkthrough slot from Walkthrough Booking; collisions are checked again at booking. Completing the walkthrough and recording plan agreement queue a balance-request draft. After verified-demo balance confirmation in this complete flow, the programme is scheduled from the following day with ten coaching calls if its recurring time is available; a conflict leaves an activation task for coach review. This is demo scheduling, not secure account provisioning.
+
+Email Center retains one draft per client/event: first steps, deposit receipt/questionnaire instructions, questionnaire acknowledgement, slot invitation, booking confirmation, balance request, balance receipt/start instructions and next-day welcome. Reminder drafts are scheduled and obsolete reminders cancelled; relevant future drafts pause on hold. Failed simulated messages create an actionable coach task and can be retried. Delivery buttons are explicitly simulations, never actual email sending. No provider credentials or money are required to test.
+
+Automation runs only on browser state changes/opening, not as a background service. All times and date boundaries remain explicitly UTC in this demo. Real email delivery, formal invoice/receipt generation, approved one-page signing, private links, reminders while the browser is closed and Google Calendar sync require the production backend and integrations.
+
+### Browser regression test
+
+`npm test` starts an isolated local server and runs the task lifecycle in Chromium. Install dev dependencies with `npm ci`; set `CHROMIUM_PATH` if Chromium is not at `/usr/bin/chromium`. The test uses only fictional data and does not contact email/payment services.
