@@ -51,3 +51,9 @@ Implement original intake submissions, versioned agreed plans, daily habit insta
 Finalise programme currency, 95% eligibility definition, exceptions, repeat terms, deposit/refund rules and privacy terms with appropriate professional review. Integrate a signing provider with signed document retention and verification rather than treating a typed name as verified signing.
 
 Test cross-client access denial, coach-only access, upload limits, export authorisation, backup restoration and account deletion before accepting real data. Add monitored scheduled jobs for weekly/day-30 reports and reminders. Conduct a security review and test the deployed environment before launch. High data volume also requires database indexes, pagination, storage quotas and bounded background jobs; localStorage is not the scaling architecture.
+
+## Expanded personalised plans
+
+Each fictional client now has 15 assignments (three per HRCMS pillar), with bilingual action, purpose, completion standard, chosen-block label and adaptation text. Existing first-five habit indices are retained so previously recorded ticks do not move to another pillar. Expanded habits and bilingual edits are stored separately from legacy demo edits. Language preference is saved per fictional client and can be changed in the header; check-in/journal draft fields survive that change. Personal identity affirmations and coach-agreed Simran are separate from habit completion. No sacred wording is invented or automatically assigned.
+
+The supplied logo is visible in chat but the original image file has not been exposed in the execution workspace. The incorrect plain SR footer has been removed, with a temporary brand-name signature pending the actual asset. Do not describe this signature as the supplied logo. Long-form demo legal/report copy still requires complete localisation.
