@@ -7,3 +7,7 @@
 - Desktop and mobile screenshots were inspected/generated in this run.
 
 These checks do not validate production authentication, server-side access isolation, automated report scheduling, backups, signing, billing or deployment. Those capabilities are not implemented.
+
+## Mobile navigation correction
+
+Verified in Chromium at 375, 390 and 430 CSS pixels: sidebar height below 110px, page heading above the fold, persistent four-button bottom navigation, expanded More menu access, menu close after navigation, all 15 assigned habits present, both coach and client navigation, and no horizontal page overflow. Desktop sidebar remains visible and bottom navigation is hidden at 1440px. No runtime errors in the tested interactions. Updated mobile screenshots are included. Physical iPhone/Safari testing remains unverified.
