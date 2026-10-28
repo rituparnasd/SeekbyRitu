@@ -1100,6 +1100,7 @@ const server = http.createServer(async (req, res) => {
       "/style.css": "style.css",
       "/app.js": "app.js",
       "/auth.js": "auth.js",
+      "/calendar.js": "calendar.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
       "/assets/fonts/NotoSerif-Regular.ttf":
         "assets/fonts/NotoSerif-Regular.ttf",

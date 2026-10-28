@@ -1416,10 +1416,10 @@ function syncWork() {
         x.id,
         "deposit",
         "Deposit Confirmed — Complete Your Onboarding",
-        "Your $150 deposit has been recorded by your coach. Receipt: deposit $150, balance $350. Complete your private questionnaire when your coach provides the secure link. After submission, allow three calendar days for plan preparation.",
+        "Your $150 deposit has been recorded by your coach. Receipt: deposit $150, balance $350. Complete your private questionnaire when your coach provides the secure link. After submission, allow three business days (Saturday and Sunday excluded) for plan preparation.",
       );
     if (intake?.submitted) {
-      w.planDue ??= dateAdd(intake.submitted.slice(0, 10), 3);
+      w.planDue ??= addBusinessDays(intake.submitted.slice(0, 10), 3);
       enqueue(
         x.id,
         "answers",
@@ -1557,7 +1557,7 @@ function taskList() {
       add(
         "plan",
         "Prepare Personalised Plan",
-        w.planDue || dateAdd(intake.submitted.slice(0, 10), 3),
+        w.planDue || addBusinessDays(intake.submitted.slice(0, 10), 3),
         "habits",
       );
       continue;
@@ -1641,7 +1641,7 @@ function workflowControls() {
   if (!c().id) return "<p>No clients yet. Register a lead to begin.</p>";
   const w = workflow(c().id),
     intake = state.intakes[c().id];
-  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · Three calendar days</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || dateAdd(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (UTC)</label><input type="date" name="date" value="${w.workBlock?.date || day}" required><input type="time" name="time" value="${w.workBlock?.time || "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button><form id="offer-slots-form"><h3>Offer Four Slots</h3>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i]?.date || dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i]?.time || "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>${w.booking ? `<div class="note">Walkthrough: ${w.booking.date} · ${w.booking.time} UTC · 30 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Walkthrough Completed ✓" : "Complete Walkthrough"}</button>` : ""}`;
+  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · Three business days · Weekends excluded</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || addBusinessDays(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (UTC)</label><input type="date" name="date" value="${w.workBlock?.date || day}" required><input type="time" name="time" value="${w.workBlock?.time || "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button><form id="offer-slots-form"><h3>Offer Four Slots</h3>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i]?.date || dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i]?.time || "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>${w.booking ? `<div class="note">Walkthrough: ${w.booking.date} · ${w.booking.time} UTC · 30 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Walkthrough Completed ✓" : "Complete Walkthrough"}</button>` : ""}`;
 }
 function bookingPage() {
   const w = workflow(c().id);
@@ -1988,7 +1988,7 @@ function documentsPage() {
       "Documents",
       "Branded drafts for review. Client-specific documents are generated from Leads & Enrollment.",
     ) +
-    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. The supplied draft says three business days; app plan deadlines currently use three calendar days pending confirmation.</div>`
+    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. Plan preparation takes three business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
   );
 }
 render();

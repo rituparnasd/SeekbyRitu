@@ -10,7 +10,7 @@ test("server event workflow creates deadlines and idempotent messages without an
     outbox: {},
   };
   reconcileWorkflow(s, "2026-01-01");
-  assert.equal(s.workflow.a.planDue, "2026-01-04");
+  assert.equal(s.workflow.a.planDue, "2026-01-06");
   assert(s.outbox["a:answers"]);
   const n = Object.keys(s.outbox).length;
   reconcileWorkflow(s, "2026-01-01");
@@ -22,4 +22,11 @@ test("server event workflow creates deadlines and idempotent messages without an
   assert.equal(s.programmes.a.start, "2026-01-04");
   assert.equal(s.programmes.a.calls.length, 10);
   assert.equal(s.outbox["a:welcome"].due, "2026-01-04");
+});
+
+test("three business days skips weekends and does not change programme-day arithmetic", () => {
+  assert.equal(globalThis.addBusinessDays("2026-10-30", 3), "2026-11-04");
+  assert.equal(globalThis.addBusinessDays("2026-10-31", 3), "2026-11-04");
+  assert.equal(globalThis.addBusinessDays("2026-11-02", 3), "2026-11-05");
+  assert.throws(() => globalThis.addBusinessDays("2026-02-30", 3));
 });
