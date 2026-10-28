@@ -1,7 +1,15 @@
+import {
+  gmailAddress,
+  gmailScope,
+  sendGmail,
+  refreshGmail,
+} from "./lib/mail.mjs";
 import http from "node:http";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+const digestBase64 = (value) =>
+  createHash("sha256").update(value).digest("base64url");
 import { database } from "./lib/database.mjs";
 import {
   encryption,
@@ -64,9 +72,38 @@ const sections = [
 const business = {
   name: process.env.BUSINESS_LEGAL_NAME || "Rituparna Das / BLINDSPOT STUDIOS",
   registration: process.env.BUSINESS_REGISTRATION || "TN28592426",
-  address: process.env.BUSINESS_ADDRESS || "",
+  address:
+    process.env.BUSINESS_ADDRESS ||
+    "Unit 706, 342 15 Avenue SW, Calgary, AB T2R 0P9, Canada",
   currency: process.env.BUSINESS_CURRENCY || "CAD",
 };
+const emailProvider = process.env.EMAIL_PROVIDER || "gmail";
+const googleClient = {
+  id: process.env.GOOGLE_CLIENT_ID || "",
+  secret: process.env.GOOGLE_CLIENT_SECRET || "",
+};
+async function gmailConnection() {
+  const rows = await db.query(
+    "SELECT value FROM metadata WHERE name='gmail_connection'",
+  );
+  return rows[0] ? crypt.open(rows[0].value) : null;
+}
+async function storeGmail(value) {
+  await db.query(
+    "INSERT INTO metadata(name,value) VALUES('gmail_connection',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+    [crypt.seal(value)],
+  );
+}
+async function mailConfigured() {
+  return emailProvider === "gmail"
+    ? !!(
+        db &&
+        googleClient.id &&
+        googleClient.secret &&
+        (await gmailConnection())?.refreshToken
+      )
+    : !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
+}
 const finalTerms = process.env.FINAL_PROGRAMME_TERMS || "";
 const responses = new AsyncLocalStorage();
 let serial = Promise.resolve();
@@ -557,8 +594,13 @@ async function prepareEmail(id, actor) {
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
-  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM)
-    fail(503, "Configure RESEND_API_KEY and verified EMAIL_FROM in Render");
+  if (!(await mailConfigured()))
+    fail(
+      503,
+      emailProvider === "gmail"
+        ? "Connect seekbyritu@gmail.com in Email Center after configuring Google OAuth credentials."
+        : "Configure verified email provider in Render",
+    );
   if (finalTerms.length > 3200)
     fail(409, "Keep the reviewed one-page terms within 3200 characters");
   if (!business.name || !business.address || !business.currency || !finalTerms)
@@ -573,6 +615,11 @@ async function prepareEmail(id, actor) {
   const previous = await db.query("SELECT payload FROM deliveries WHERE id=?", [
     id,
   ]);
+  if (previous[0] && crypt.open(previous[0].payload).status === "Unknown")
+    fail(
+      409,
+      "Check Gmail Sent and resolve the uncertain delivery before retrying",
+    );
   if (previous[0] && crypt.open(previous[0].payload).status === "Sent")
     return { status: "Already Sent" };
   if (previous[0]) {
@@ -592,7 +639,7 @@ async function prepareEmail(id, actor) {
     .replaceAll("in the demo Booking screen", "in Walkthrough Booking")
     .replaceAll("Production login and private links are not connected.", "");
   const mail = {
-    from: process.env.EMAIL_FROM,
+    from: emailProvider === "gmail" ? gmailAddress : process.env.EMAIL_FROM,
     to: [lead.email],
     reply_to: process.env.EMAIL_REPLY_TO || "seekbyritu@gmail.com",
     subject: e.subject,
@@ -629,25 +676,56 @@ async function prepareEmail(id, actor) {
 async function sendEmail(id, actor) {
   const prepared = await exclusive(() => prepareEmail(id, actor));
   if (prepared.status === "Already Sent") return prepared;
-  let sent = false;
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + process.env.RESEND_API_KEY,
-        "Content-Type": "application/json",
-        "Idempotency-Key": "seek-" + digest(id),
-      },
-      body: JSON.stringify(prepared.mail),
-      signal: AbortSignal.timeout(15000),
-    });
-    sent = response.ok;
-  } catch {}
+  let delivery;
+  if (emailProvider === "gmail") {
+    let connection;
+    try {
+      connection = await exclusive(async () => {
+        const current = await gmailConnection();
+        if (!current) throw Error("Reconnect Gmail");
+        const updated = await refreshGmail(current, googleClient);
+        await storeGmail(updated);
+        return updated;
+      });
+      delivery = await sendGmail(
+        { ...prepared.mail, from: gmailAddress, reply_to: gmailAddress },
+        id,
+        connection.accessToken,
+      );
+    } catch {
+      delivery = {
+        status: "Failed",
+        message:
+          "Gmail authorisation needs attention. Reconnect Gmail in Email Center before retrying.",
+      };
+    }
+  } else {
+    let sent = false;
+    try {
+      const response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + process.env.RESEND_API_KEY,
+          "Content-Type": "application/json",
+          "Idempotency-Key": "seek-" + digest(id),
+        },
+        body: JSON.stringify(prepared.mail),
+        signal: AbortSignal.timeout(15000),
+      });
+      sent = response.ok;
+    } catch {}
+    delivery = { status: sent ? "Sent" : "Failed" };
+  }
   return exclusive(async () => {
     const s = await stateRead(),
       e = s.outbox[id];
     if (!e) fail(404, "Message no longer exists");
-    e.status = sent ? "Sent" : "Failed";
+    const sent = delivery.status === "Sent";
+    e.status = delivery.status;
+    e.lastError =
+      delivery.status === "Sent"
+        ? null
+        : delivery.message || "Provider rejected delivery";
     if (sent) e.sentAt = new Date().toISOString();
     await db.query(
       "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
@@ -657,9 +735,11 @@ async function sendEmail(id, actor) {
     await audit(actor, sent ? "email_sent" : "email_failed");
     return {
       status: e.status,
-      message: sent
-        ? "Provider accepted delivery."
-        : "Delivery failed. Check sender/provider settings and retry.",
+      message:
+        delivery.message ||
+        (sent
+          ? "Provider accepted delivery."
+          : "Delivery failed. Check sender/provider settings and retry."),
     };
   });
 }
@@ -718,8 +798,8 @@ const server = http.createServer(async (req, res) => {
         setupRequired: !owner,
         missing,
         storageError: initError,
-        emailConfigured:
-          !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM,
+        emailProvider,
+        emailConfigured: db ? await mailConfigured() : false,
         businessConfigured:
           !!business.name &&
           !!business.address &&
@@ -819,6 +899,69 @@ const server = http.createServer(async (req, res) => {
             message: "Password set. You can now sign in.",
           });
         });
+      if (path === "/api/gmail/callback" && req.method === "GET") {
+        if (!googleClient.id || !googleClient.secret)
+          fail(503, "Google OAuth is not configured");
+        const u = new URL(req.url, origin),
+          stateHash = digest(u.searchParams.get("state") || "");
+        const oauth = await exclusive(async () => {
+          const rows = await db.query(
+            "SELECT value FROM metadata WHERE name=?",
+            ["google_oauth:" + stateHash],
+          );
+          if (!rows[0])
+            fail(400, "Invalid or expired Gmail connection request");
+          const entry = crypt.open(rows[0].value);
+          await db.query("DELETE FROM metadata WHERE name=?", [
+            "google_oauth:" + stateHash,
+          ]);
+          return entry;
+        });
+        if (oauth.expires < Date.now())
+          fail(400, "Gmail connection request expired");
+        if (u.searchParams.get("error") || !u.searchParams.get("code"))
+          fail(400, "Gmail connection was not approved");
+        const response = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: googleClient.id,
+            client_secret: googleClient.secret,
+            code: u.searchParams.get("code"),
+            code_verifier: oauth.verifier,
+            redirect_uri: origin + "/api/gmail/callback",
+            grant_type: "authorization_code",
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok)
+          fail(502, "Google authorisation could not be completed");
+        const tokens = await response.json();
+        const info = await fetch(
+          "https://openidconnect.googleapis.com/v1/userinfo",
+          {
+            headers: { Authorization: "Bearer " + tokens.access_token },
+            signal: AbortSignal.timeout(15000),
+          },
+        );
+        if (!info.ok) fail(502, "Unable to verify connected Google account");
+        const profile = await info.json();
+        if (profile.email !== gmailAddress || profile.email_verified !== true)
+          fail(403, "Connect only seekbyritu@gmail.com");
+        if (!tokens.refresh_token)
+          fail(400, "Offline consent was not granted. Reconnect with consent.");
+        await exclusive(async () => {
+          await storeGmail({
+            email: profile.email,
+            refreshToken: tokens.refresh_token,
+            accessToken: tokens.access_token,
+            expires: Date.now() + (tokens.expires_in || 3600) * 1000,
+          });
+          await audit(oauth.owner, "gmail_connected");
+        });
+        res.writeHead(303, { Location: origin + "/" });
+        return res.end();
+      }
       const auth = await session(req);
       if (!auth) fail(401, "Sign in required");
       if (
@@ -839,6 +982,79 @@ const server = http.createServer(async (req, res) => {
           role: a.role,
           id: a.id,
           email: a.email,
+        });
+      if (path.startsWith("/api/gmail/") && a.role !== "coach")
+        fail(403, "Coach access required");
+      if (path === "/api/gmail/status" && req.method === "GET")
+        return json(res, 200, {
+          provider: emailProvider,
+          oauthConfigured: !!googleClient.id && !!googleClient.secret,
+          connected: !!(await gmailConnection())?.refreshToken,
+          email: gmailAddress,
+        });
+      if (path === "/api/gmail/connect" && req.method === "POST")
+        return await exclusive(async () => {
+          if (!googleClient.id || !googleClient.secret)
+            fail(
+              503,
+              "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Render first",
+            );
+          const state = randomToken(),
+            verifier = randomToken();
+          await db.query("INSERT INTO metadata(name,value) VALUES(?,?)", [
+            "google_oauth:" + digest(state),
+            crypt.seal({
+              owner: a.id,
+              verifier,
+              expires: Date.now() + 10 * 60000,
+            }),
+          ]);
+          const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+          u.search = new URLSearchParams({
+            client_id: googleClient.id,
+            redirect_uri: origin + "/api/gmail/callback",
+            response_type: "code",
+            scope: gmailScope,
+            access_type: "offline",
+            prompt: "consent",
+            login_hint: gmailAddress,
+            state,
+            code_challenge: digestBase64(verifier),
+            code_challenge_method: "S256",
+          }).toString();
+          return json(res, 200, { url: u.toString() });
+        });
+      if (path === "/api/gmail/disconnect" && req.method === "POST")
+        return await exclusive(async () => {
+          await db.query("DELETE FROM metadata WHERE name='gmail_connection'");
+          await audit(a.id, "gmail_disconnected");
+          return json(res, 200, { ok: true });
+        });
+      if (path === "/api/gmail/resolve-message" && req.method === "POST")
+        return await exclusive(async () => {
+          const b = await body(req);
+          if (!["Sent", "Draft"].includes(b.status))
+            fail(400, "Invalid resolution");
+          const rows = await db.query(
+            "SELECT payload FROM deliveries WHERE id=?",
+            [b.id],
+          );
+          if (!rows[0]) fail(404, "Delivery not found");
+          const d = crypt.open(rows[0].payload);
+          if (d.status !== "Unknown")
+            fail(409, "Only uncertain deliveries need manual resolution");
+          d.status = b.status;
+          d.resolvedBy = a.id;
+          d.resolvedAt = new Date().toISOString();
+          await db.query("UPDATE deliveries SET payload=? WHERE id=?", [
+            crypt.seal(d),
+            b.id,
+          ]);
+          const s = await stateRead();
+          if (s.outbox[b.id]) s.outbox[b.id].status = b.status;
+          await stateWrite(s);
+          await audit(a.id, "gmail_delivery_resolved");
+          return json(res, 200, { ok: true });
         });
       if (path === "/api/logout" && req.method === "POST") {
         await db.query("DELETE FROM sessions WHERE token_hash=?", [

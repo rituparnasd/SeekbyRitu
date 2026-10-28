@@ -1596,11 +1596,14 @@ function taskList() {
       );
   }
   for (const e of Object.values(state.outbox || {})) {
-    if (e.status === "Failed")
+    if (["Failed", "Unknown"].includes(e.status))
       tasks.push({
         id: e.id + ":failed",
         client: e.client,
-        label: "Resolve Failed Email: " + e.subject,
+        label:
+          (e.status === "Unknown"
+            ? "Verify Email Delivery: "
+            : "Resolve Failed Email: ") + e.subject,
         due: day,
         view: "emails",
         waiting: false,
@@ -1818,11 +1821,11 @@ function emailsPage() {
       "Email Center",
       "Review templates and event-generated messages. Delivery uses the configured verified sender.",
     ) +
-    `<div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrolment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
+    `<div class="card"><h2>Gmail Connection</h2><p>Sender and replies: <strong>seekbyritu@gmail.com</strong></p><p>Connect through Google authorisation. No Gmail password is stored.</p><div class="actions"><button class="btn primary" id="gmail-connect">Connect / Reconnect Gmail</button><button class="btn" id="gmail-disconnect">Disconnect Gmail</button></div><div id="gmail-status"></div></div><div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrolment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
       Object.values(state.outbox || {})
         .map(
           (e) =>
-            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status)} · ${e.due}</span></div><p class="small muted">${esc(clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p><div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button></div></div>`,
+            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status)} · ${e.due}</span></div><p class="small muted">${esc(clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p>${e.lastError ? `<div class="note">${esc(e.lastError)}</div>` : ""}<div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused", "Unknown"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button>${e.status === "Unknown" ? `<div class="note">Check Gmail Sent first. The response was interrupted, so retrying without checking could send a duplicate.<div class="actions"><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Sent">I Verified It Was Sent</button><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Draft">Not Sent — Allow Retry</button></div></div>` : ""}</div></div>`,
         )
         .join("") ||
       "<p>No emails queued. Register your first lead to begin.</p>"
@@ -1840,6 +1843,49 @@ function agreement() {
   );
 }
 function bindServerActions() {
+  $("#gmail-connect")?.addEventListener("click", async () => {
+    try {
+      await saveChain;
+      const result = await api("/api/gmail/connect", {
+        method: "POST",
+        headers: { "X-CSRF-Token": window.__session.csrf },
+      });
+      location.assign(result.url);
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+  $("#gmail-disconnect")?.addEventListener("click", async () => {
+    try {
+      await api("/api/gmail/disconnect", {
+        method: "POST",
+        headers: { "X-CSRF-Token": window.__session.csrf },
+      });
+      location.reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+  document.querySelectorAll("[data-resolve-mail]").forEach(
+    (b) =>
+      (b.onclick = async () => {
+        try {
+          await saveChain;
+          await api("/api/gmail/resolve-message", {
+            method: "POST",
+            headers: { "X-CSRF-Token": window.__session.csrf },
+            body: JSON.stringify({
+              id: b.dataset.resolveMail,
+              status: b.dataset.resolution,
+            }),
+          });
+          location.reload();
+        } catch (e) {
+          toast(e.message);
+        }
+      }),
+  );
+
   $("#profile-editor")?.addEventListener("submit", (e) => {
     e.preventDefault();
     const f = new FormData(e.target),

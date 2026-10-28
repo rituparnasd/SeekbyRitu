@@ -10,7 +10,7 @@ The seeded demonstration clients have been removed. A new database starts with *
 - Leads, original 30-question intake, agreed profiles, manually assigned habits/practices, check-ins, separate journals with dated history and internal scheduling.
 - Event-generated coach tasks, plan deadlines and email queue; server-side event reconciliation works without a coach browser open.
 - Daily resource gating, optional coach approval, weekly/day-30 report generation, PDF invoices/receipts/one-page agreement and encrypted backup export/restore.
-- Optional Resend sending with event idempotency keys and PDF attachments. No mail is sent until credentials, verified sender and final business settings are configured.
+- Gmail OAuth sending from/replies to seekbyritu@gmail.com, with PDF attachments. Tokens are encrypted; no Gmail password is stored. No mail is sent until Google consent and final business settings are configured.
 
 This is an initial server-backed implementation, **not a completed security certification or production launch approval**. Real PostgreSQL/Render deployment, deliverability, legal terms and scale/load verification remain outstanding. The original logo was extracted losslessly, including its original transparency, from the supplied draft PDF. It is bundled in the app and document templates; no substitute monogram is used.
 
@@ -36,16 +36,27 @@ The existing Render service name is intentionally retained in `render.yaml`; no 
 
 Generate secrets in a trusted terminal/password manager, for example `openssl rand -base64 32` for the encryption key and `openssl rand -hex 32` for the owner token. Store them directly in secure environment settings and keep protected recovery copies. **Changing or losing the encryption key makes existing data unreadable.** Key rotation needs a deliberate migration; do not regenerate it on each deploy.
 
-### Email and document settings
+### Gmail and document settings
 
-- `RESEND_API_KEY`: secret API key entered only in secure environment settings.
-- `EMAIL_FROM`: provider-verified sender on a domain you control.
-- `BUSINESS_LEGAL_NAME`, `BUSINESS_ADDRESS`, `BUSINESS_CURRENCY`: approved business details.
-- `PAYMENT_INSTRUCTIONS`: approved payment route; never invent account details.
-- `FINAL_PROGRAMME_TERMS`: reviewed agreement text, at most 3,200 characters to fit the one-page layout. Include currency, refund/cancellation rules, 95% eligibility definition, approved adaptations, emergencies, repeat process and privacy/access terms. Do not use an unreviewed draft to take payment.
-- `MAIL_AUTOMATION=true`: opt in to background sending of due Draft messages. Default is manual review/send in Email Center.
+The confirmed sender and reply address is **seekbyritu@gmail.com**. A paid domain email address is not required. Website/domain remain at **seekbyritu.com**, with domain DNS at GoDaddy and the website hosted on Emergent; this change does not move the website or modify DNS.
 
-Emails go through `api.resend.com` with TLS verification. First-steps emails attach the agreement; deposit/balance confirmations attach receipts and include secure setup links when needed. Balance requests attach invoice PDFs. A provider-accepted response records Sent; it is not proof the recipient read the email or that it avoided spam. Bank payments are **manually verified by the coach**; no bank/processor integration exists.
+1. In Google Cloud, enable the Gmail API and configure OAuth consent for the business.
+2. Create an OAuth **Web Application** client. Its authorised redirect URI must be the exact `APP_ORIGIN` followed by `/api/gmail/callback` (for the current Render URL: `https://seek-by-ritu-demo.onrender.com/api/gmail/callback`).
+3. Put `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` directly in Render's secure Environment settings. Do not put the secret in GitHub or chat. Set `EMAIL_PROVIDER=gmail` (the default).
+4. If Google consent is in Testing, add seekbyritu@gmail.com as a test user. Testing refresh tokens can expire; use the appropriate production consent/verification process before relying on unattended live sending. Google may require a privacy policy, domain verification and app verification for the chosen scope.
+5. Sign into the CRM as coach → **Email Center → Connect / Reconnect Gmail**, then approve Google access while signed into seekbyritu@gmail.com. Other Google accounts are rejected. OAuth uses single-use expiring state and PKCE.
+6. Send a controlled test to an address you own; verify sender/reply address, receipt/agreement attachments and inbox delivery before enabling automation.
+
+The app requests only OpenID/email identity and Gmail send scope, not inbox-reading access. It does not receive the Gmail password. Refresh/access tokens are encrypted in the database. Disconnect removes the local connection; Google account permissions can also be revoked through Google security settings.
+
+- `BUSINESS_LEGAL_NAME`, `BUSINESS_ADDRESS`, `BUSINESS_CURRENCY`: optional overrides for the confirmed defaults: Rituparna Das / BLINDSPOT STUDIOS, Unit 706, 342 15 Avenue SW, Calgary, AB T2R 0P9, Canada; CAD. Registration: TN28592426.
+- `PAYMENT_INSTRUCTIONS`: approved payment route; never invent bank/account details.
+- `FINAL_PROGRAMME_TERMS`: reviewed agreement text, at most 3,200 characters. Finalise refund/cancellation, 95% eligibility, adaptations, emergencies, repeat process and privacy/access terms before collecting payment.
+- `MAIL_AUTOMATION=true`: opt in to background sending of due drafts; default is manual review/send.
+
+First-steps messages attach the agreement; verified payment confirmations attach receipts. Balance requests attach invoice PDFs. Gmail acceptance is not proof of inbox delivery or reading. Gmail does not provide an exactly-once sending guarantee: if a network interruption makes delivery uncertain, the app records **Unknown**, blocks blind retries and asks the coach to check Gmail Sent before manually resolving the status. Tests mock Gmail; live Google consent, refresh and delivery remain unverified without configured credentials.
+
+Optional legacy Resend support requires `EMAIL_PROVIDER=resend`, `RESEND_API_KEY` and a verified domain `EMAIL_FROM`; it cannot send as @gmail.com.
 
 Account-authenticated agreement acknowledgement stores the exact text/version and timestamp. It is not third-party identity-verified e-signing and does not guarantee legal enforceability. Final professional review is still required. Draft documents are labelled when details are missing; invoice tax treatment remains to be confirmed.
 
@@ -87,4 +98,4 @@ Local SQLite is allowed **only** under `NODE_ENV=test` with `TEST_DB_PATH`; prod
 
 `docs/templates/Inner-Code-Agreement-and-Payment-Pack-DRAFT.pdf` contains the one-page agreement, deposit request, balance invoice and receipt template. Individual PDFs are supplied beside it. Regenerate with `node scripts/design-documents.mjs`. Fonts are embedded with their licence notices. Documents preserve the supplied draft’s open legal/payment items; they are not approved for sending or signing.
 
-The uploaded draft identifies Rituparna Das / BLINDSPOT STUDIOS, Alberta registration TN28592426, CAD and seekbyritu@gmail.com; runtime business name/currency defaults reflect those details. Postal address, sender domain/address and approved final terms remain required. Plan preparation now uses the confirmed **three business days**, counting from the day after submission and skipping Saturday/Sunday. Public holidays are not currently excluded. Existing manually revised deadlines are preserved. Programme start dates and every-third-day coaching calls still use calendar days.
+The uploaded draft identifies Rituparna Das / BLINDSPOT STUDIOS, Alberta registration TN28592426, CAD and seekbyritu@gmail.com; runtime business name/currency defaults reflect those details. The postal address and Gmail sender/reply address have now been confirmed. Approved final terms and the Google OAuth connection remain required. Plan preparation now uses the confirmed **three business days**, counting from the day after submission and skipping Saturday/Sunday. Public holidays are not currently excluded. Existing manually revised deadlines are preserved. Programme start dates and every-third-day coaching calls still use calendar days.

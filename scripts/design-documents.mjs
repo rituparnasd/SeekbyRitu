@@ -26,7 +26,7 @@ function agreement(doc) {
   clause(
     doc,
     "01 / Parties",
-    "Rituparna Das, operating as BLINDSPOT STUDIOS, delivering Inner Code under the Seek by Ritu brand (Coach), and [Client Full Name] (Client). Agreement date: [Date].",
+    "Rituparna Das, operating as BLINDSPOT STUDIOS, delivering Inner Code under the Seek by Ritu brand (Coach), and [Client Full Name] (Client). Agreement date: [Date]. Business address: Unit 706, 342 15 Avenue SW, Calgary, AB T2R 0P9, Canada.",
   );
   clause(
     doc,
@@ -83,6 +83,11 @@ function party(doc) {
     doc,
     "Issued By",
     "Rituparna Das / BLINDSPOT STUDIOS  |  Alberta Registration: TN28592426",
+  );
+  clause(
+    doc,
+    "Business Address",
+    "Unit 706, 342 15 Avenue SW, Calgary, AB T2R 0P9, Canada",
   );
   clause(doc, "Prepared For", "[Client Full Name]  |  [Client Email]");
   clause(

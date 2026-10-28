@@ -16,6 +16,9 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     NODE_ENV: "test",
     PORT: "3191",
     APP_ORIGIN: origin,
+    EMAIL_PROVIDER: "gmail",
+    GOOGLE_CLIENT_ID: "test-google-client",
+    GOOGLE_CLIENT_SECRET: "test-google-secret",
     TEST_DB_PATH: join(dir, "data.db"),
     DATA_ENCRYPTION_KEY: key,
     OWNER_SETUP_TOKEN: token,
@@ -94,6 +97,22 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     });
     assert.equal(login.status, 200);
     const coach = { cookie: login.cookie, csrf: login.data.csrf };
+    const connect = await request("/api/gmail/connect", {
+      ...coach,
+      method: "POST",
+    });
+    assert.equal(connect.status, 200);
+    const consent = new URL(connect.data.url);
+    assert.equal(consent.origin, "https://accounts.google.com");
+    assert.equal(
+      consent.searchParams.get("redirect_uri"),
+      origin + "/api/gmail/callback",
+    );
+    assert.equal(consent.searchParams.get("code_challenge_method"), "S256");
+    assert.equal(
+      (await request("/api/gmail/callback?state=wrong&code=unused")).status,
+      400,
+    );
     let data = (await request("/api/state", coach)).data;
     assert.equal(data.state.leads.length, 0);
     assert.equal(
@@ -261,6 +280,7 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     );
     const me = await request("/api/me", client);
     assert.equal(me.data.role, "client");
+    assert.equal((await request("/api/gmail/status", client)).status, 403);
     await request("/api/logout", { ...client, method: "POST" });
     assert.equal((await request("/api/state", client)).status, 401);
   } finally {
