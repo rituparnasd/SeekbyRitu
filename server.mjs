@@ -1,3 +1,4 @@
+import { setupDiagnosis } from "./lib/setup-diagnostics.mjs";
 import {
   gmailAddress,
   gmailScope,
@@ -39,16 +40,18 @@ const missing = required.filter(
 );
 let db,
   crypt,
-  initError = false;
+  initError = false,
+  setupDiagnostic = null;
 if (!missing.length) {
+  let stage = "encryption";
   try {
     crypt = encryption(process.env.DATA_ENCRYPTION_KEY);
+    stage = "database";
     db = await database();
-  } catch {
+  } catch (error) {
     initError = true;
-    console.error(
-      "Storage initialisation failed. Check database connectivity and encryption key configuration.",
-    );
+    setupDiagnostic = setupDiagnosis(stage, error);
+    console.error("Storage setup failed: " + setupDiagnostic.code);
   }
 }
 const sections = [
@@ -798,6 +801,7 @@ const server = http.createServer(async (req, res) => {
         setupRequired: !owner,
         missing,
         storageError: initError,
+        setupDiagnostic,
         emailProvider,
         emailConfigured: db ? await mailConfigured() : false,
         businessConfigured:
