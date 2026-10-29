@@ -1049,3 +1049,47 @@ hr {
     display: block;
   }
 }
+/* Shared catalogue and client-document editor surfaces. */
+.billing-toolbar {
+  margin-bottom: 24px;
+}
+.billing-item {
+  min-width: 0;
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.billing-item legend {
+  padding: 0 8px;
+  font-weight: 600;
+  color: var(--green);
+}
+.billing-item > .actions {
+  margin-bottom: 12px;
+}
+.agreement-editor {
+  min-height: 260px;
+  line-height: 1.8;
+}
+#product-form label:has(input[type="checkbox"]),
+#invoice-form label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0;
+}
+#product-form h3,
+#invoice-form h3 {
+  margin-top: 24px;
+}
+#product-form .list-item h3,
+.billing-toolbar + .card .list-item h3 {
+  margin: 8px 0;
+}
+@media (max-width: 700px) {
+  .billing-item {
+    padding: 16px 12px;
+  }
+}

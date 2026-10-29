@@ -285,6 +285,31 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     const me = await request("/api/me", client);
     assert.equal(me.data.role, "client");
     assert.equal((await request("/api/gmail/status", client)).status, 403);
+    assert.equal((await request("/api/billing", client)).status, 403);
+    assert.equal(
+      (await request("/api/billing/pdf?id=anything", client)).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request("/api/billing/product", {
+          ...client,
+          method: "POST",
+          body: { name: "Forbidden" },
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request("/api/billing/product", {
+          cookie: coach.cookie,
+          method: "POST",
+          body: { name: "Missing CSRF" },
+        })
+      ).status,
+      403,
+    );
     for (let i = 0; i < 13; i++) {
       const signed = await request("/api/login", {
         method: "POST",

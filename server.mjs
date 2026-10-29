@@ -27,6 +27,8 @@ import {
 import { reconcileWorkflow } from "./lib/workflow.mjs";
 import { reportData, reportPDF } from "./lib/reports.mjs";
 import { pdfDocument, agreementText } from "./lib/documents.mjs";
+import { billingStore, billingPDF } from "./lib/billing.mjs";
+import { innerCodeTerms } from "./lib/inner-code-terms.mjs";
 const origin = process.env.APP_ORIGIN || "",
   production = process.env.NODE_ENV !== "test";
 const required = [
@@ -622,6 +624,55 @@ async function prepareEmail(id, actor) {
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
+  if (e.type === "billing") {
+    const record = (await billingStore(db, crypt, finalTerms).documents()).find(
+      (d) => d.id === e.documentId,
+    );
+    if (!record || record.status !== "Issued" || !record.approved)
+      fail(
+        409,
+        "Issue the reviewed invoice and Service Agreement before emailing",
+      );
+    if (
+      state.leads.some(
+        (l) => l.isTest && l.email.toLowerCase() === record.customer.email,
+      ) ||
+      /\.(invalid|test)$/.test(record.customer.email)
+    )
+      fail(409, "Live email is disabled for test customers");
+    if (!(await mailConfigured()))
+      fail(503, "Connect the email provider in Email Center");
+    const previous = (
+      await db.query("SELECT payload FROM deliveries WHERE id=?", [id])
+    )[0];
+    if (previous) {
+      const delivery = crypt.open(previous.payload);
+      if (delivery.status === "Sent") return { status: "Already Sent" };
+      if (["Unknown", "Pending"].includes(delivery.status))
+        fail(
+          409,
+          "Check Gmail Sent and resolve the pending or uncertain delivery before retrying",
+        );
+    }
+    const mail = {
+      from: emailProvider === "gmail" ? gmailAddress : process.env.EMAIL_FROM,
+      reply_to: gmailAddress,
+      to: [record.customer.email],
+      subject: `Your Invoice and Service Agreement — ${record.reference}`,
+      text: `Hello ${record.customer.name},\n\nPlease review your attached invoice and Service Agreement.\nTotal: ${record.currency} ${(record.total / 100).toFixed(2)}\nDue: ${record.due}\n\n${record.payment}\n\n${record.business.name}`,
+      attachments: [],
+    };
+    for (const kind of ["invoice", "agreement"])
+      mail.attachments.push({
+        filename: `${record.reference}-${kind}.pdf`,
+        content: (await billingPDF(record, kind)).toString("base64"),
+      });
+    await db.query(
+      "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+      [id, crypt.seal({ status: "Pending", mail })],
+    );
+    return { mail };
+  }
   if (state.leads.some((l) => l.id === e.client && l.isTest))
     fail(409, "Live email is disabled for test clients.");
   if (!(await mailConfigured()))
@@ -1012,6 +1063,80 @@ const server = http.createServer(async (req, res) => {
       )
         fail(403, "Invalid request token");
       const a = auth.account;
+      if (path === "/api/billing" || path.startsWith("/api/billing/")) {
+        if (a.role !== "coach") fail(403, "Coach access required");
+        const store = billingStore(db, crypt, finalTerms || innerCodeTerms);
+        if (path === "/api/billing" && req.method === "GET")
+          return await exclusive(async () =>
+            json(res, 200, {
+              products: await store.products(),
+              documents: await store.documents(),
+            }),
+          );
+        if (path === "/api/billing/pdf" && req.method === "GET") {
+          const url = new URL(req.url, "http://localhost");
+          const record = (await store.documents()).find(
+            (d) => d.id === url.searchParams.get("id"),
+          );
+          if (!record) fail(404, "Document not found");
+          const kind =
+            url.searchParams.get("kind") === "agreement"
+              ? "agreement"
+              : "invoice";
+          res.writeHead(200, {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `inline; filename="${record.reference || "draft"}-${kind}.pdf"`,
+          });
+          return res.end(await billingPDF(record, kind));
+        }
+        if (req.method === "POST")
+          return await exclusive(async () => {
+            const b = await body(req);
+            let result;
+            if (path === "/api/billing/product")
+              result = await store.saveProduct(b);
+            else if (path === "/api/billing/draft")
+              result = await store.saveDocument(b, business);
+            else if (path === "/api/billing/issue")
+              result = await store.issue(b.id, b.version);
+            else if (path === "/api/billing/revise")
+              result = await store.revise(b.id);
+            else if (path === "/api/billing/queue") {
+              const record = (await store.documents()).find(
+                (d) => d.id === b.id,
+              );
+              if (!record || record.status !== "Issued")
+                fail(409, "Issue the documents before preparing an email");
+              const s = await stateRead(),
+                lead = s.leads.find(
+                  (l) => l.email.toLowerCase() === record.customer.email,
+                );
+              if (
+                lead?.isTest ||
+                /\.(invalid|test)$/.test(record.customer.email)
+              )
+                fail(409, "Live email is disabled for test customers");
+              const id = `billing:${record.id}`;
+              s.outbox[id] ??= {
+                id,
+                client: lead?.id || "",
+                recipient: record.customer.name,
+                documentId: record.id,
+                type: "billing",
+                manualOnly: true,
+                subject: `Your Invoice and Service Agreement — ${record.reference}`,
+                body: `To: ${record.customer.email}. Attached: invoice and Service Agreement. Total: ${record.currency} ${(record.total / 100).toFixed(2)}. Due: ${record.due}. ${record.payment}`,
+                due: day(),
+                status: "Draft",
+              };
+              await stateWrite(s);
+              result = { queued: true };
+            } else fail(404, "Billing action not found");
+            await audit(a.id, "billing_" + path.split("/").pop());
+            return json(res, 200, { result });
+          });
+        fail(405, "Method not allowed");
+      }
       if (path === "/api/terms" && req.method === "GET")
         return json(res, 200, {
           terms: finalTerms || agreementText(business),
@@ -1371,6 +1496,9 @@ const server = http.createServer(async (req, res) => {
       "/index.html": "index.html",
       "/style.css": "style.css",
       "/app.js": "app.js",
+      "/billing.js": "billing.js",
+      "/assets/fonts/OpenSans-Semibold.ttf":
+        "assets/fonts/OpenSans-Semibold.ttf",
       "/auth.js": "auth.js",
       "/calendar.js": "calendar.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
@@ -1435,6 +1563,31 @@ if (db)
       "Training profile could not be created; coach can use Create Test Client instead.",
     );
   }
+// A restart after a provider request cannot prove delivery failed. Require review.
+if (db)
+  await exclusive(async () => {
+    const s = await stateRead();
+    let changed = false;
+    for (const e of Object.values(s.outbox)) {
+      if (e.type !== "billing") continue;
+      const row = (
+        await db.query("SELECT payload FROM deliveries WHERE id=?", [e.id])
+      )[0];
+      if (!row) continue;
+      const delivery = crypt.open(row.payload);
+      if (delivery.status !== "Pending") continue;
+      delivery.status = "Unknown";
+      await db.query("UPDATE deliveries SET payload=? WHERE id=?", [
+        crypt.seal(delivery),
+        e.id,
+      ]);
+      e.status = "Unknown";
+      e.lastError =
+        "Delivery was interrupted. Check Gmail Sent before resolving or retrying.";
+      changed = true;
+    }
+    if (changed) await stateWrite(s);
+  });
 server.listen(process.env.PORT || 3000, "0.0.0.0");
 if (db) {
   let running = false;
@@ -1453,7 +1606,9 @@ if (db) {
         if (process.env.MAIL_AUTOMATION !== "true") return [];
         const s = await stateRead();
         return Object.values(s.outbox)
-          .filter((e) => e.status === "Draft" && e.due <= day())
+          .filter(
+            (e) => !e.manualOnly && e.status === "Draft" && e.due <= day(),
+          )
           .map((e) => e.id);
       });
       for (const id of ids)

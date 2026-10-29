@@ -156,6 +156,8 @@ function render() {
         ["overview", "Today’s Work"],
         ["emails", "Email Center"],
         ["documents", "Documents"],
+        ["catalogue", "Products & Services"],
+        ["billing", "Billing"],
         ["leads", "Leads & Enrollment"],
         ["clients", "Clients"],
         ["calendar", "Calendar"],
@@ -165,7 +167,7 @@ function render() {
         ["journals", "Journals"],
         ["resources", "Resource Library"],
         ["reports", "Progress Reports"],
-        ["agreement", "Agreements"],
+        ["agreement", "Service Agreements"],
         ["notes", "Coach Notes"],
       ]
     : [
@@ -206,6 +208,7 @@ function render() {
   bindWorkflow();
   bindTasks();
   bindServerActions();
+  bindBilling();
   save();
 }
 function title(k, sub, action = "") {
@@ -225,6 +228,8 @@ function page() {
       "calendar",
       "emails",
       "documents",
+      "catalogue",
+      "billing",
     ].includes(state.view)
   )
     return title(
@@ -232,6 +237,9 @@ function page() {
       "Register your first lead in Leads & Enrollment. No sample users or content are loaded.",
     );
   switch (state.view) {
+    case "catalogue":
+    case "billing":
+      return billingPage();
     case "work":
       return workPage();
     case "emails":
@@ -1828,7 +1836,7 @@ function emailsPage() {
       Object.values(state.outbox || {})
         .map(
           (e) =>
-            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status)} · ${e.due}</span></div><p class="small muted">${esc(clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p>${e.lastError ? `<div class="note">${esc(e.lastError)}</div>` : ""}<div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused", "Unknown"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button>${e.status === "Unknown" ? `<div class="note">Check Gmail Sent first. The response was interrupted, so retrying without checking could send a duplicate.<div class="actions"><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Sent">I Verified It Was Sent</button><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Draft">Not Sent — Allow Retry</button></div></div>` : ""}</div></div>`,
+            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status)} · ${e.due}</span></div><p class="small muted">${esc(e.recipient || clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p>${e.lastError ? `<div class="note">${esc(e.lastError)}</div>` : ""}<div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused", "Unknown"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button>${e.status === "Unknown" ? `<div class="note">Check Gmail Sent first. The response was interrupted, so retrying without checking could send a duplicate.<div class="actions"><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Sent">I Verified It Was Sent</button><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Draft">Not Sent — Allow Retry</button></div></div>` : ""}</div></div>`,
         )
         .join("") ||
       "<p>No emails queued. Register your first lead to begin.</p>"
@@ -1838,7 +1846,7 @@ function emailsPage() {
 function agreement() {
   return (
     title(
-      "Programme Agreement",
+      "Service Agreement",
       "Review the exact final terms before accepting or paying. Draft terms are not approved for enrolment.",
     ) +
     (state.mode === "coach" ? selector() : "") +

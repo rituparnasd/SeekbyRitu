@@ -70,6 +70,64 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       .waitFor();
     assert.equal(loginRequests, 1);
     assert.equal(await page.locator("#persona option").count(), 1);
+    await page.locator('[data-view="catalogue"]').click();
+    await page.locator("#new-product").click();
+    await page.locator("#product-name").fill("Fixture Workshop");
+    await page.locator("#product-price").fill("19.99");
+    await page.locator("#product-tax").fill("5");
+    await page.locator("#product-description").fill("A personalised workshop.");
+    await page
+      .locator("#product-terms")
+      .fill(
+        "One workshop. Cancellation accepted up to seven days before the event. Payment is due before attendance.",
+      );
+    await page.locator('#product-form [name="approved"]').check();
+    await page
+      .getByRole("button", { name: "Save Defaults", exact: true })
+      .click();
+    await page
+      .getByRole("heading", { name: "Fixture Workshop", exact: true })
+      .waitFor();
+    await page.locator('[data-view="billing"]').click();
+    await page.locator("#new-invoice").click();
+    const workshopId = await page
+      .locator("#item-product-0 option")
+      .filter({ hasText: "Fixture Workshop" })
+      .getAttribute("value");
+    await page.locator("#item-product-0").selectOption(workshopId);
+    await page.locator("#billing-name").fill("Invoice Fixture");
+    await page.locator("#billing-email").fill("invoice@example.test");
+    await page
+      .locator("#billing-payment")
+      .fill("Pay through the agreed fixture payment method.");
+    await page.locator('#invoice-form [name="approved"]').check();
+    await page
+      .getByRole("button", { name: "Save Draft & Preview", exact: true })
+      .click();
+    await page
+      .getByRole("heading", {
+        name: "Draft Invoice · Invoice Fixture",
+        exact: true,
+      })
+      .waitFor();
+    await page
+      .getByRole("button", { name: "Issue Documents", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Create Revision", exact: true })
+      .waitFor();
+    const billing = await page.evaluate(() => api("/api/billing"));
+    assert.equal(billing.documents[0].total, 2099);
+    const invoicePDF = await page.request.get(
+      `${origin}/api/billing/pdf?id=${billing.documents[0].id}&kind=invoice`,
+    );
+    assert.equal((await invoicePDF.body()).subarray(0, 4).toString(), "%PDF");
+    await page
+      .getByRole("button", { name: "Prepare Email", exact: true })
+      .click();
+    await page
+      .getByText("Live email is disabled for test customers", { exact: true })
+      .waitFor();
     assert.equal(
       await page.getByText("Daniel Brooks", { exact: true }).count(),
       0,
@@ -131,6 +189,8 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
         "agreement",
         "notes",
         "documents",
+        "catalogue",
+        "billing",
       ]) {
         await page.evaluate((view) => {
           state.view = view;
@@ -150,6 +210,23 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
             fullPage: true,
           });
       }
+      await page.evaluate(() => {
+        state.view = "billing";
+        documentEditor = newBillingDraft();
+        render();
+      });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+        `Billing editor overflows at ${width}px`,
+      );
+      if (process.env.UI_SCREENSHOTS && [375, 1440].includes(width))
+        await page.screenshot({
+          path: `${process.env.UI_SCREENSHOTS}/billing-editor-${width}.png`,
+          fullPage: true,
+        });
       await page.evaluate(() => {
         state.mode = "client";
         state.client = clients.find((client) => client.isTest).id;
