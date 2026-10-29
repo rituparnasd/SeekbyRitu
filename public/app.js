@@ -182,7 +182,7 @@ function render() {
         ["agreement", t("My Agreement", "Mera agreement")],
       ];
   $("#app").innerHTML =
-    `<div class="notice">PRIVATE WORKSPACE · Server-backed access · Deployment and legal checks required before enrollment</div><div class="shell"><aside class="sidebar"><div class="mobile-brand-row"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>SeekbyRitu</span></div><button class="mobile-menu-toggle" aria-expanded="false" aria-controls="workspace-navigation">${t("Menu", "Menu")}</button></div><div class="tag">Conscious action. Real life.</div><nav id="workspace-navigation" class="nav" aria-label="Main navigation">${nav.map(([id, label]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}">${label}</button>`).join("")}</nav><footer><div class="brand-signature">Seek by Ritu</div>SELF-MASTERY, EVERY DAY.<br>One intention. One next action.</footer></aside><main class="workspace"><header class="topbar"><div><div class="eyebrow">${coach ? "Your coaching studio" : "CLIENT WORKSPACE"}</div><span class="small">${coach ? "Welcome back, Rituparna" : esc(c().name) + " · " + t("Day", "Din") + " " + programmeDay(c().id) + " / 30"}</span></div><div class="actions"><select ${window.__session.role === "client" ? "disabled" : ""} id="persona" aria-label="Workspace"><option value="coach" ${coach ? "selected" : ""}>Ritu · Coach workspace</option>${clients.map((x) => `<option value="${x.id}" ${!coach && c().id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><span id="save-status" class="save-status">${saveError ? esc("NOT SAVED — " + saveError) : "Server connected"}</span><button class="btn subtle" id="logout">Sign Out</button></div></header><div class="content">${page()}</div></main><nav class="mobile-bottom" aria-label="Quick navigation">${(coach
+    `<div class="notice">${c().isTest ? "TEST CLIENT PREVIEW · Fictional training records · No live emails/payments" : "PRIVATE WORKSPACE · Server-backed access · Deployment and legal checks required before enrollment"}</div><div class="shell"><aside class="sidebar"><div class="mobile-brand-row"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>SeekbyRitu</span></div><button class="mobile-menu-toggle" aria-expanded="false" aria-controls="workspace-navigation">${t("Menu", "Menu")}</button></div><div class="tag">Conscious action. Real life.</div><nav id="workspace-navigation" class="nav" aria-label="Main navigation">${nav.map(([id, label]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}">${label}</button>`).join("")}</nav><footer><div class="brand-signature">Seek by Ritu</div>SELF-MASTERY, EVERY DAY.<br>One intention. One next action.</footer></aside><main class="workspace"><header class="topbar"><div><div class="eyebrow">${coach ? "Your coaching studio" : window.__session.role === "coach" ? "COACH PREVIEW · CLIENT WORKSPACE" : "CLIENT WORKSPACE"}</div><span class="small">${coach ? "Welcome back, Rituparna" : esc(c().name) + " · " + t("Day", "Din") + " " + programmeDay(c().id) + " / 30"}</span></div><div class="actions"><select ${window.__session.role === "client" ? "disabled" : ""} id="persona" aria-label="Workspace"><option value="coach" ${coach ? "selected" : ""}>Ritu · Coach workspace</option>${clients.map((x) => `<option value="${x.id}" ${!coach && c().id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><span id="save-status" class="save-status">${saveError ? esc("NOT SAVED — " + saveError) : "Server connected"}</span><button class="btn subtle" id="logout">Sign Out</button></div></header><div class="content">${page()}</div></main><nav class="mobile-bottom" aria-label="Quick navigation">${(coach
       ? [
           ["overview", "Home"],
           ["clients", "Clients"],
@@ -284,7 +284,8 @@ function clientPage() {
     title(
       "People, before paperwork.",
       "Open a record or see the dashboard your client sees.",
-    ) + `<div class="card">${clients.map(clientRow).join("")}</div>`
+    ) +
+    `<div class="card"><button class="btn" id="create-test-client">Create Test Client</button><p class="small muted">Fictional training only. Real emails, payments and coaching calls are disabled for this profile.</p>${clients.map(clientRow).join("")}</div>`
   );
 }
 function habitList(details = false, readonly = false) {
@@ -1032,7 +1033,8 @@ function registerProfile(l) {
     name: l.first + " " + l.last,
     initials: (l.first[0] + l.last[0]).toUpperCase(),
     language: "en",
-    background: "New Enrollment",
+    isTest: !!l.isTest,
+    background: l.isTest ? "Fictional Training Profile" : "New Enrollment",
     goal: l.goal || "Plan to be agreed after consultation.",
     identity: l.identity || "Identity statement to be agreed with the client.",
     day: 1,
@@ -1518,6 +1520,7 @@ function reconcileMessages() {
 function taskList() {
   const tasks = [];
   for (const x of clients) {
+    if (x.isTest) continue;
     const id = x.id,
       w = workflow(id),
       p = programme(id),
@@ -1843,6 +1846,18 @@ function agreement() {
   );
 }
 function bindServerActions() {
+  $("#create-test-client")?.addEventListener("click", async () => {
+    try {
+      await saveChain;
+      await api("/api/test-client", {
+        method: "POST",
+        headers: { "X-CSRF-Token": window.__session.csrf },
+      });
+      location.reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
   $("#gmail-connect")?.addEventListener("click", async () => {
     try {
       await saveChain;

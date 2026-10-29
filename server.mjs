@@ -1,3 +1,4 @@
+import { addTestClient } from "./lib/test-client.mjs";
 import { LoginLimiter } from "./lib/login-limiter.mjs";
 import { setupDiagnosis } from "./lib/setup-diagnostics.mjs";
 import {
@@ -271,10 +272,11 @@ function scope(s, a) {
     );
   result.leads = s.leads
     .filter((l) => l.id === id)
-    .map(({ id, first, last, goal, identity, difficulty }) => ({
+    .map(({ id, first, last, goal, identity, difficulty, isTest }) => ({
       id,
       first,
       last,
+      isTest,
       ...(access ? { goal, identity, difficulty } : {}),
     }));
   for (const section of ["programmes", "workflow", "intakes", "agreements"])
@@ -585,6 +587,7 @@ async function financialRecord(s, id, kind, stage) {
   if (rows[0]) return crypt.open(rows[0].payload);
   const record = {
     kind,
+    isTest: !!l.isTest,
     business,
     client: l.first + " " + l.last,
     reference,
@@ -592,8 +595,9 @@ async function financialRecord(s, id, kind, stage) {
     date: (
       s.programmes[id]?.verifiedAt?.[stage] || new Date().toISOString()
     ).slice(0, 10),
-    body:
-      kind === "agreement"
+    body: l.isTest
+      ? "FICTIONAL TRAINING RECORD — No payment was collected. Not a real invoice, receipt or signed agreement."
+      : kind === "agreement"
         ? finalTerms
         : kind === "receipt"
           ? "Payment manually verified by coach. This is not a payment processor verification."
@@ -601,7 +605,13 @@ async function financialRecord(s, id, kind, stage) {
             (process.env.PAYMENT_INSTRUCTIONS ||
               "Pending. Do not pay until final terms are agreed."),
   };
-  if (business.name && business.address && business.currency && finalTerms)
+  if (
+    !l.isTest &&
+    business.name &&
+    business.address &&
+    business.currency &&
+    finalTerms
+  )
     await db.query(
       "INSERT INTO financial_documents(id,payload) VALUES(?,?) ON CONFLICT(id) DO NOTHING",
       [reference, crypt.seal(record)],
@@ -612,6 +622,8 @@ async function prepareEmail(id, actor) {
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
+  if (state.leads.some((l) => l.id === e.client && l.isTest))
+    fail(409, "Live email is disabled for test clients.");
   if (!(await mailConfigured()))
     fail(
       503,
@@ -630,6 +642,7 @@ async function prepareEmail(id, actor) {
     fail(409, "Message is not due");
   const lead = state.leads.find((l) => l.id === e.client);
   if (!lead?.email) fail(400, "Client email missing");
+  if (lead.isTest) fail(409, "Live email is disabled for test clients.");
   const previous = await db.query("SELECT payload FROM deliveries WHERE id=?", [
     id,
   ]);
@@ -764,6 +777,7 @@ async function sendEmail(id, actor) {
 async function generateReports() {
   const s = await stateRead();
   for (const l of s.leads) {
+    if (l.isTest) continue;
     const p = s.programmes[l.id];
     if (!p?.start || !p.balance || p.status !== "Active") continue;
     const elapsed = Math.floor(
@@ -1163,6 +1177,20 @@ const server = http.createServer(async (req, res) => {
         ["/api/invite", "/api/send-email", "/api/export"].includes(path)
       )
         fail(403, "Coach access required");
+      if (path === "/api/test-client" && req.method === "POST")
+        return await exclusive(async () => {
+          if (a.role !== "coach") fail(403, "Coach access required");
+          const s = await stateRead(),
+            lead = addTestClient(s);
+          await ensureAccounts(s);
+          await stateWrite(s);
+          await audit(a.id, "test_client_created");
+          return json(res, 200, {
+            id: lead.id,
+            message:
+              "Test client ready. No real emails or payments are triggered.",
+          });
+        });
       if (path === "/api/invite" && req.method === "POST")
         return await exclusive(async () => {
           const b = await body(req),
@@ -1378,6 +1406,35 @@ const server = http.createServer(async (req, res) => {
     });
   }
 });
+// One-time, user-requested additive training profile for an already configured owner.
+if (db)
+  try {
+    await exclusive(async () => {
+      const marker = "requested_test_profile_v1";
+      if (
+        (await db.query("SELECT value FROM metadata WHERE name=?", [marker]))[0]
+      )
+        return;
+      const accounts = await db.query("SELECT payload FROM accounts");
+      const owner = accounts
+        .map((r) => crypt.open(r.payload))
+        .find((a) => a.role === "coach");
+      if (!owner) return;
+      const s = await stateRead();
+      addTestClient(s);
+      await ensureAccounts(s);
+      await stateWrite(s);
+      await db.query("INSERT INTO metadata(name,value) VALUES(?,?)", [
+        marker,
+        "completed",
+      ]);
+      await audit(owner.id, "requested_test_client_added");
+    });
+  } catch {
+    console.error(
+      "Training profile could not be created; coach can use Create Test Client instead.",
+    );
+  }
 server.listen(process.env.PORT || 3000, "0.0.0.0");
 if (db) {
   let running = false;

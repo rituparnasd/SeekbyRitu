@@ -24,7 +24,7 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     OWNER_SETUP_TOKEN: token,
   };
   delete env.DATABASE_URL;
-  const child = spawn(process.execPath, ["server.mjs"], {
+  let child = spawn(process.execPath, ["server.mjs"], {
     env,
     stdio: ["ignore", "ignore", "inherit"],
   });
@@ -204,6 +204,10 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       body: { email: "one@example.test", password: "client-password-long-123" },
     });
     const client = { cookie: logged.cookie, csrf: logged.data.csrf };
+    assert.equal(
+      (await request("/api/test-client", { ...client, method: "POST" })).status,
+      403,
+    );
     data = (await request("/api/state", client)).data;
     assert.equal(data.state.leads.length, 1);
     assert.deepEqual(data.state.notes, {});
@@ -306,6 +310,76 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     assert(blocked.data.retryAfter > 0 && blocked.data.retryAfter <= 900);
     await request("/api/logout", { ...client, method: "POST" });
     assert.equal((await request("/api/state", client)).status, 401);
+    child.kill();
+    await new Promise((r) => child.once("exit", r));
+    child = spawn(process.execPath, ["server.mjs"], {
+      env,
+      stdio: ["ignore", "ignore", "inherit"],
+    });
+    for (let i = 0; i < 60; i++) {
+      try {
+        if ((await fetch(origin + "/health")).ok) break;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    const resumed = await request("/api/login", {
+      method: "POST",
+      body: {
+        email: "owner@example.test",
+        password: "owner-password-long-123",
+        code: setup.data.recoveryCodes[0],
+      },
+    });
+    assert.equal(resumed.status, 200);
+    const owner = { cookie: resumed.cookie, csrf: resumed.data.csrf };
+    let snapshot = (await request("/api/state", owner)).data;
+    const training = snapshot.state.leads.filter((l) => l.isTest);
+    assert.equal(training.length, 1);
+    assert.equal(snapshot.state.notes["client-one"], "PRIVATE COACH NOTE");
+    assert.equal(snapshot.state.customPlans[training[0].id].length, 15);
+    assert.equal(snapshot.state.programmes[training[0].id].calls.length, 0);
+    assert.equal(
+      Object.values(snapshot.state.outbox).filter(
+        (e) => e.client === training[0].id,
+      ).length,
+      0,
+    );
+    const testCreated = await request("/api/test-client", {
+      ...owner,
+      method: "POST",
+    });
+    assert.equal(testCreated.status, 200);
+    assert.equal(testCreated.data.id, training[0].id);
+    snapshot = (await request("/api/state", owner)).data;
+    snapshot.state.outbox["test-forbidden"] = {
+      id: "test-forbidden",
+      client: training[0].id,
+      type: "deposit",
+      subject: "Test",
+      body: "No live delivery",
+      due: new Date().toISOString().slice(0, 10),
+      status: "Draft",
+    };
+    assert.equal(
+      (
+        await request("/api/state", {
+          ...owner,
+          method: "PUT",
+          body: { revision: snapshot.revision, state: snapshot.state },
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await request("/api/send-email", {
+          ...owner,
+          method: "POST",
+          body: { id: "test-forbidden" },
+        })
+      ).status,
+      409,
+    );
   } finally {
     if (child.exitCode === null) {
       child.kill();

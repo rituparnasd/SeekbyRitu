@@ -1,6 +1,6 @@
 # Seek by Ritu — server-backed coaching workspace
 
-The seeded demonstration clients have been removed. A new database starts with **zero clients, habits, journals or resource assignments**. The old browser-local demo key is removed on loading the login screen; it is never imported into the live database. Temporary identities used in automated tests exist only in disposable test databases.
+The original seeded demonstration clients were removed. A fresh database starts empty. Per the coach’s later request, this release adds **one explicitly marked fictional training client** on the first restart of an already configured owner workspace. A persisted migration marker prevents repeated creation. The coach can also use Clients → Create Test Client (idempotent). The old browser-local demo key is removed on loading the login screen; it is never imported into the live database. Temporary identities used in automated tests exist only in disposable test databases.
 
 ## Current capabilities
 
@@ -105,3 +105,9 @@ The uploaded draft identifies Rituparna Das / BLINDSPOT STUDIOS, Alberta registr
 If setup shows `DATABASE_TLS`, the screen now also gives a safe `TLS Detail` such as `ERR_TLS_CERT_ALTNAME_INVALID` or `SELF_SIGNED_CERT_IN_CHAIN`. Share only those codes, not the connection URL. Do not change the encryption key or disable verification.
 
 `DATABASE_CA_CERT` can supply an additional **provider-issued CA certificate** in PEM format when required by the provider. Obtain it through the provider's authenticated dashboard/official support or verified official documentation. Do not trust a certificate copied from an unverified handshake, a random download, or a private key. The app retains public roots, verifies certificate validity/hostname and rejects malformed/non-CA input. This is optional trust configuration, not a verification bypass. Live Render certificate requirements remain unverified until the exact TLS detail is known.
+
+## Training client and account preview
+
+Aarav Mehta (Test) is a fictional Day-8 profile with 15 example habits, four-window practices, sample intake/check-in/journal entries and daily resource examples. Coach workspace dropdown or View as Client opens a clearly labelled coach preview; it does not log the coach into a different authenticated account. The normal client invitation flow can be used separately for testing actual client-role login. Test email addresses use the reserved `example.invalid` domain. Server-side sending is blocked for test clients, no enrollment messages are queued, coaching calls are empty and sample financial PDFs are labelled fictional. The profile does not change any real client, login or encryption settings.
+
+The `onrender.com` hostname is only the current public address. A custom subdomain such as `crm.seekbyritu.com` can be added in Render Custom Domains, followed by the exact CNAME Render specifies in GoDaddy DNS and HTTPS verification. Keep the main website hosted on Emergent. Update `APP_ORIGIN` and the Google OAuth redirect URI together when changing the CRM hostname; verify login and Gmail afterwards. Code and PostgreSQL data can also be migrated to another compatible hosting provider, with a tested backup/restore and secure configuration.
