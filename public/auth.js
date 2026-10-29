@@ -30,7 +30,7 @@ async function boot() {
     window.__config = config;
     if (!config.ready) {
       layout(
-        `<h1>Server Setup Required</h1><p>The workspace is locked until secure storage is configured.</p><p class="muted">Missing settings: ${escapeText(config.missing.join(", ") || "Check database connectivity and encryption key configuration.")}</p>${config.setupDiagnostic ? `<div class="note"><strong>Setup Code: ${escapeText(config.setupDiagnostic.code)}</strong><p>${escapeText(config.setupDiagnostic.hint)}</p></div>` : ""}<p>Set these in Render → Service → Environment. Share only the setup code; never paste credentials in chat.</p>`,
+        `<h1>Server Setup Required</h1><p>The workspace is locked until secure storage is configured.</p><p class="muted">Missing settings: ${escapeText(config.missing.join(", ") || "Check database connectivity and encryption key configuration.")}</p>${config.setupDiagnostic ? `<div class="note"><strong>Setup Code: ${escapeText(config.setupDiagnostic.code)}</strong>${config.setupDiagnostic.tlsCode ? `<p><strong>TLS Detail: ${escapeText(config.setupDiagnostic.tlsCode)}</strong></p>` : ""}<p>${escapeText(config.setupDiagnostic.hint)}</p></div>` : ""}<p>Set these in Render → Service → Environment. Share only the setup code; never paste credentials in chat.</p>`,
       );
       return;
     }
