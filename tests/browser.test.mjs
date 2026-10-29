@@ -55,10 +55,20 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await page.locator('[name="email"]').fill("owner@example.test");
     await page.locator('[name="password"]').fill("browser-owner-long-123");
     await page.locator('[name="code"]').fill(totp(setup.secret));
-    await page.locator("#login-form button").click();
+    let loginRequests = 0;
+    await page.route("**/api/login", async (route) => {
+      loginRequests++;
+      await new Promise((r) => setTimeout(r, 100));
+      await route.continue();
+    });
+    await page.locator("#login-form").evaluate((form) => {
+      form.requestSubmit();
+      form.requestSubmit();
+    });
     await page
       .getByRole("heading", { name: "Today’s Work", exact: true })
       .waitFor();
+    assert.equal(loginRequests, 1);
     assert.equal(await page.locator("#persona option").count(), 1);
     assert.equal(
       await page.getByText("Daniel Brooks", { exact: true }).count(),
@@ -99,6 +109,25 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     assert.deepEqual(errors, []);
     await page.locator("#logout").click();
     await page.getByRole("heading", { name: "Welcome Back" }).waitFor();
+    await page.unroute("**/api/login");
+    await page.route("**/api/login", (route) =>
+      route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        headers: { "Retry-After": "1" },
+        body: JSON.stringify({
+          error: "Too many incorrect attempts",
+          retryAfter: 1,
+        }),
+      }),
+    );
+    await page.locator('[name="email"]').fill("owner@example.test");
+    await page.locator('[name="password"]').fill("browser-owner-long-123");
+    await page.locator("#login-form button").click();
+    await page.getByRole("button", { name: "Try Again In 0:01" }).waitFor();
+    assert.equal(await page.locator("#login-form button").isDisabled(), true);
+    await page.getByRole("button", { name: "Sign In", exact: true }).waitFor();
+    assert.equal(await page.locator("#login-form button").isDisabled(), false);
   } finally {
     await browser?.close();
     if (child.exitCode === null) {

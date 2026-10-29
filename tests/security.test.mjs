@@ -281,6 +281,29 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     const me = await request("/api/me", client);
     assert.equal(me.data.role, "client");
     assert.equal((await request("/api/gmail/status", client)).status, 403);
+    for (let i = 0; i < 13; i++) {
+      const signed = await request("/api/login", {
+        method: "POST",
+        body: {
+          email: "one@example.test",
+          password: "client-password-long-123",
+        },
+      });
+      assert.equal(
+        signed.status,
+        200,
+        "Successful logins must not create a lockout",
+      );
+    }
+    let blocked;
+    for (let i = 0; i < 12; i++) {
+      blocked = await request("/api/login", {
+        method: "POST",
+        body: { email: "one@example.test", password: "wrong-password" },
+      });
+      assert.equal(blocked.status, i === 11 ? 429 : 401);
+    }
+    assert(blocked.data.retryAfter > 0 && blocked.data.retryAfter <= 900);
     await request("/api/logout", { ...client, method: "POST" });
     assert.equal((await request("/api/state", client)).status, 401);
   } finally {

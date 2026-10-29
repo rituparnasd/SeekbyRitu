@@ -1,3 +1,4 @@
+import { LoginLimiter } from "./lib/login-limiter.mjs";
 import { setupDiagnosis } from "./lib/setup-diagnostics.mjs";
 import {
   gmailAddress,
@@ -515,6 +516,20 @@ async function newSession(res, a) {
   );
   return csrf;
 }
+const loginLimiter = new LoginLimiter();
+function loginBlocked(seconds) {
+  throw Object.assign(
+    Error(
+      "Too many incorrect sign-in attempts. Try again when the countdown ends.",
+    ),
+    { status: 429, retryAfter: seconds },
+  );
+}
+function loginFailure(key) {
+  const wait = loginLimiter.failure(key);
+  if (wait) loginBlocked(wait);
+  fail(401, "Email, password or authenticator code is incorrect");
+}
 const attempts = new Map();
 function rateLimit(key) {
   const now = Date.now();
@@ -856,7 +871,9 @@ const server = http.createServer(async (req, res) => {
       if (path === "/api/login" && req.method === "POST")
         return await exclusive(async () => {
           const b = await body(req);
-          rateLimit("login:" + emailHash(String(b.email || "")));
+          const loginKey = emailHash(String(b.email || ""));
+          const wait = loginLimiter.retryAfter(loginKey);
+          if (wait) loginBlocked(wait);
           const r = await db.query(
             "SELECT payload FROM accounts WHERE email_hash=?",
             [emailHash(String(b.email || ""))],
@@ -867,21 +884,28 @@ const server = http.createServer(async (req, res) => {
             !a.password ||
             !(await checkPassword(b.password, a.password))
           )
-            fail(401, "Email, password or authenticator code is incorrect");
+            loginFailure(loginKey);
           if (a.role === "coach") {
             const step = verifyTotp(a.mfa, b.code, a.mfaLast);
             if (step === false) {
               const index = (a.recovery || []).findIndex((v) =>
                 constantEqual(v, digest(String(b.code || ""))),
               );
-              if (index < 0)
-                fail(401, "Email, password or authenticator code is incorrect");
+              if (index < 0) {
+                if (verifyTotp(a.mfa, b.code, -1) !== false)
+                  fail(
+                    409,
+                    "This authenticator code was already used. Wait for the next code in your app, then sign in.",
+                  );
+                loginFailure(loginKey);
+              }
               a.recovery.splice(index, 1);
             } else a.mfaLast = step;
             await saveAccount(a);
           }
           const csrf = await newSession(res, a);
           await audit(a.id, "login");
+          loginLimiter.success(loginKey);
           return json(res, 200, { csrf, role: a.role, id: a.id });
         });
       if (path === "/api/accept-invite" && req.method === "POST")
@@ -1344,7 +1368,10 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     if (!res.headersSent) res.removeHeader("Set-Cookie");
     if (!production && !error.status) console.error(error.stack);
+    if (error.retryAfter)
+      res.setHeader("Retry-After", String(error.retryAfter));
     json(res, error.status || 500, {
+      ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}),
       error: error.status
         ? error.message
         : "Unable to complete request. Please try again or contact the coach.",

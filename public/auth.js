@@ -13,7 +13,13 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   const data = await response.json();
-  if (!response.ok) throw Error(data.error || "Request failed");
+  if (!response.ok)
+    throw Object.assign(Error(data.error || "Request failed"), {
+      status: response.status,
+      retryAfter: Number(
+        data.retryAfter || response.headers.get("Retry-After") || 0,
+      ),
+    });
   return data;
 }
 function layout(content) {
@@ -102,8 +108,15 @@ function login() {
   layout(
     `<h1>Welcome Back</h1><form id="login-form"><label>Email</label><input type="email" name="email" required autocomplete="username"><label>Password</label><input type="password" name="password" required autocomplete="current-password"><label>Coach Authenticator Code (Clients Leave Blank)</label><input name="code" inputmode="numeric" maxlength="32" autocomplete="one-time-code"><button class="btn primary">Sign In</button></form><p id="auth-error" role="alert"></p><p class="small muted">Need to reset your password? Contact your coach for a new single-use setup link.</p>`,
   );
+  let submitting = false;
   document.querySelector("#login-form").onsubmit = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    submitting = true;
+    const button = e.target.querySelector("button");
+    button.disabled = true;
+    button.textContent = "Signing In…";
+    let cooling = false;
     try {
       await api("/api/login", {
         method: "POST",
@@ -112,6 +125,34 @@ function login() {
       location.reload();
     } catch (err) {
       error(err.message);
+      if (err.status === 429 && err.retryAfter > 0) {
+        cooling = true;
+        const end = Date.now() + err.retryAfter * 1000;
+        const tick = () => {
+          const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+          if (!remaining) {
+            clearInterval(timer);
+            submitting = false;
+            button.disabled = false;
+            button.textContent = "Sign In";
+            error("You can try again now. Use the latest authenticator code.");
+            return;
+          }
+          button.textContent =
+            "Try Again In " +
+            Math.floor(remaining / 60) +
+            ":" +
+            String(remaining % 60).padStart(2, "0");
+        };
+        const timer = setInterval(tick, 1000);
+        tick();
+      }
+    } finally {
+      if (!cooling) {
+        submitting = false;
+        button.disabled = false;
+        button.textContent = "Sign In";
+      }
     }
   };
 }
