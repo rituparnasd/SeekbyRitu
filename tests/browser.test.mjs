@@ -106,6 +106,73 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       );
       assert((await page.locator(".sidebar").boundingBox()).height < 110);
     }
+    // Exercise dense forms and long client content at phone and desktop widths.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator("#create-test-client").click();
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("#persona option")].some((o) =>
+        o.textContent.includes("Aarav"),
+      ),
+    );
+    for (const width of [375, 700, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const view of [
+        "work",
+        "leads",
+        "emails",
+        "calendar",
+        "habits",
+        "practices",
+        "records",
+        "journals",
+        "resources",
+        "reports",
+        "profile",
+        "agreement",
+        "notes",
+        "documents",
+      ]) {
+        await page.evaluate((view) => {
+          state.view = view;
+          render();
+        }, view);
+        await page.evaluate(() => document.fonts.ready);
+        assert.equal(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth > innerWidth,
+          ),
+          false,
+          `${view} overflows at ${width}px`,
+        );
+        if (process.env.UI_SCREENSHOTS && [375, 1440].includes(width))
+          await page.screenshot({
+            path: `${process.env.UI_SCREENSHOTS}/${view}-${width}.png`,
+            fullPage: true,
+          });
+      }
+      await page.evaluate(() => {
+        state.mode = "client";
+        state.client = clients.find((client) => client.isTest).id;
+        state.view = "today";
+        render();
+      });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+        `Client Today overflows at ${width}px`,
+      );
+      if (process.env.UI_SCREENSHOTS && [375, 1440].includes(width))
+        await page.screenshot({
+          path: `${process.env.UI_SCREENSHOTS}/today-${width}.png`,
+          fullPage: true,
+        });
+      await page.evaluate(() => {
+        state.mode = "coach";
+        render();
+      });
+    }
     assert.deepEqual(errors, []);
     await page.locator("#logout").click();
     await page.getByRole("heading", { name: "Welcome Back" }).waitFor();
