@@ -258,9 +258,8 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     const pdf = await request("/api/pdf/agreement?client=client-one", coach);
     assert.equal(pdf.status, 200);
     assert.equal(pdf.data.subarray(0, 4).toString(), "%PDF");
-    assert.equal(
-      (pdf.data.toString("latin1").match(/\/Type \/Page\b/g) || []).length,
-      1,
+    assert(
+      (pdf.data.toString("latin1").match(/\/Type \/Page\b/g) || []).length >= 2,
     );
     const backup = await request("/api/export", coach);
     assert.equal(
@@ -358,6 +357,17 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     assert.equal(resumed.status, 200);
     const owner = { cookie: resumed.cookie, csrf: resumed.data.csrf };
     let snapshot = (await request("/api/state", owner)).data;
+    assert.equal(
+      snapshot.state.leads.filter((l) => l.isTest).length,
+      0,
+      "Live startup must not seed sample clients",
+    );
+    const testCreated = await request("/api/test-client", {
+      ...owner,
+      method: "POST",
+    });
+    assert.equal(testCreated.status, 200);
+    snapshot = (await request("/api/state", owner)).data;
     const training = snapshot.state.leads.filter((l) => l.isTest);
     assert.equal(training.length, 1);
     assert.equal(snapshot.state.notes["client-one"], "PRIVATE COACH NOTE");
@@ -369,12 +379,10 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       ).length,
       0,
     );
-    const testCreated = await request("/api/test-client", {
-      ...owner,
-      method: "POST",
-    });
-    assert.equal(testCreated.status, 200);
-    assert.equal(testCreated.data.id, training[0].id);
+    assert.equal(
+      (await request("/api/test-client", { ...owner, method: "POST" })).data.id,
+      training[0].id,
+    );
     snapshot = (await request("/api/state", owner)).data;
     snapshot.state.outbox["test-forbidden"] = {
       id: "test-forbidden",

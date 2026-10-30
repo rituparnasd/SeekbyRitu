@@ -23,7 +23,7 @@ async function api(path, options = {}) {
   return data;
 }
 function layout(content) {
-  root.innerHTML = `<main class="auth-shell"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>SeekbyRitu</span></div><p class="eyebrow">PRIVATE COACHING WORKSPACE</p><section class="card">${content}</section><p class="small muted">Your account data is stored on the configured server. No sample clients are loaded.</p></main>`;
+  root.innerHTML = `<main class="auth-shell"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>seekbyritu</span></div><p class="eyebrow">PRIVATE COACHING WORKSPACE</p><section class="card">${content}</section><p class="small muted">Your account data is stored on the configured server. No sample clients are loaded.</p></main>`;
 }
 function error(message) {
   const el = document.querySelector("#auth-error");
@@ -38,6 +38,10 @@ async function boot() {
       layout(
         `<h1>Server Setup Required</h1><p>The workspace is locked until secure storage is configured.</p><p class="muted">Missing settings: ${escapeText(config.missing.join(", ") || "Check database connectivity and encryption key configuration.")}</p>${config.setupDiagnostic ? `<div class="note"><strong>Setup Code: ${escapeText(config.setupDiagnostic.code)}</strong>${config.setupDiagnostic.tlsCode ? `<p><strong>TLS Detail: ${escapeText(config.setupDiagnostic.tlsCode)}</strong></p>` : ""}<p>${escapeText(config.setupDiagnostic.hint)}</p></div>` : ""}<p>Set these in Render → Service → Environment. Share only the setup code; never paste credentials in chat.</p>`,
       );
+      return;
+    }
+    if (new URL(location.href).searchParams.has("onboarding")) {
+      await loadPrivateOnboarding();
       return;
     }
     let me;

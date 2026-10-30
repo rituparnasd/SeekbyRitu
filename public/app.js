@@ -153,42 +153,27 @@ function render() {
   const coach = state.mode === "coach";
   const nav = coach
     ? [
-        ["overview", "Today’s Work"],
-        ["emails", "Email Center"],
-        ["documents", "Documents"],
-        ["catalogue", "Products & Services"],
-        ["billing", "Billing"],
-        ["leads", "Leads & Enrollment"],
+        ["overview", "Today"],
         ["clients", "Clients"],
         ["calendar", "Calendar"],
-        ["practices", "Daily Practices"],
-        ["habits", "Plan & Habits"],
-        ["records", "Daily Records"],
-        ["journals", "Journals"],
-        ["resources", "Resource Library"],
-        ["reports", "Progress Reports"],
-        ["agreement", "Service Agreements"],
-        ["notes", "Coach Notes"],
+        ["catalogue", "Products & Services"],
+        ["billing", "Billing"],
+        ["admin", "Admin"],
       ]
     : [
-        ["today", t("My Day", "Mera din")],
-        ["onboarding", "Onboarding"],
-        ["booking", "Walkthrough Booking"],
-        ["practices", "Daily Practices"],
-        ["habits", t("Know Your Habits", "Apni habits jaano")],
-        ["checkin", t("Check-In", "Check-In")],
-        ["journals", t("My Journals", "Mere journals")],
-        ["resources", t("My Resources", "Mere resources")],
-        ["profile", t("My Profile", "Meri profile")],
-        ["reports", t("My Progress", "Meri progress")],
-        ["agreement", t("My Agreement", "Mera agreement")],
+        ["today", "My Day"],
+        ["checkin", "Check-In"],
+        ["journals", "My Journals"],
+        ["resources", "My Resources"],
+        ["profile", "My Profile"],
+        ["reports", "My Progress"],
       ];
   $("#app").innerHTML =
-    `<div class="notice">${c().isTest ? "TEST CLIENT PREVIEW · Fictional training records · No live emails/payments" : "PRIVATE WORKSPACE · Server-backed access · Deployment and legal checks required before enrollment"}</div><div class="shell"><aside class="sidebar"><div class="mobile-brand-row"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>SeekbyRitu</span></div><button class="mobile-menu-toggle" aria-expanded="false" aria-controls="workspace-navigation">${t("Menu", "Menu")}</button></div><div class="tag">Conscious action. Real life.</div><nav id="workspace-navigation" class="nav" aria-label="Main navigation">${nav.map(([id, label]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}">${label}</button>`).join("")}</nav><footer><div class="brand-signature">Seek by Ritu</div>SELF-MASTERY, EVERY DAY.<br>One intention. One next action.</footer></aside><main class="workspace"><header class="topbar"><div><div class="eyebrow">${coach ? "Your coaching studio" : window.__session.role === "coach" ? "COACH PREVIEW · CLIENT WORKSPACE" : "CLIENT WORKSPACE"}</div><span class="small">${coach ? "Welcome back, Rituparna" : esc(c().name) + " · " + t("Day", "Din") + " " + programmeDay(c().id) + " / 30"}</span></div><div class="actions"><select ${window.__session.role === "client" ? "disabled" : ""} id="persona" aria-label="Workspace"><option value="coach" ${coach ? "selected" : ""}>Ritu · Coach workspace</option>${clients.map((x) => `<option value="${x.id}" ${!coach && c().id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><span id="save-status" class="save-status">${saveError ? esc("NOT SAVED — " + saveError) : "Server connected"}</span><button class="btn subtle" id="logout">Sign Out</button></div></header><div class="content">${page()}</div></main><nav class="mobile-bottom" aria-label="Quick navigation">${(coach
+    `<div class="notice">${!coach && c().isTest ? "SAMPLE PREVIEW · Fictional information" : "Seek by Ritu · Private Coaching Workspace"}</div><div class="shell"><aside class="sidebar"><div class="mobile-brand-row"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>seekbyritu</span></div><button class="mobile-menu-toggle" aria-expanded="false" aria-controls="workspace-navigation">${t("Menu", "Menu")}</button></div><div class="tag">Conscious action. Real life.</div><nav id="workspace-navigation" class="nav" aria-label="Main navigation">${nav.map(([id, label]) => `<button data-view="${id}" class="${state.view === id ? "active" : ""}">${label}</button>`).join("")}</nav><footer><div class="brand-signature">Seek by Ritu</div>SELF-MASTERY, EVERY DAY.<br>One intention. One next action.</footer></aside><main class="workspace"><header class="topbar"><div><div class="eyebrow">${coach ? "Your coaching studio" : window.__session.role === "coach" ? "COACH PREVIEW · CLIENT WORKSPACE" : "CLIENT WORKSPACE"}</div><span class="small">${coach ? "Welcome back, Rituparna" : esc(c().name) + " · " + t("Day", "Din") + " " + programmeDay(c().id) + " / 30"}</span></div><div class="actions"><select ${window.__session.role === "client" ? "disabled" : ""} id="persona" aria-label="Workspace"><option value="coach" ${coach ? "selected" : ""}>Rituparna · Coach Workspace</option>${clients.map((x) => `<option value="${x.id}" ${!coach && c().id === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><span id="save-status" class="save-status">${saveError ? esc("NOT SAVED — " + saveError) : "Server connected"}</span><button class="btn subtle" id="logout">Sign Out</button></div></header><div class="content">${coach ? clientNavigation() : ""}${page()}</div></main><nav class="mobile-bottom" aria-label="Quick navigation">${(coach
       ? [
-          ["overview", "Home"],
+          ["overview", "Today"],
           ["clients", "Clients"],
-          ["records", "Records"],
+          ["calendar", "Calendar"],
         ]
       : [
           ["today", t("Today", "Aaj")],
@@ -209,6 +194,7 @@ function render() {
   bindTasks();
   bindServerActions();
   bindBilling();
+  bindSimpleWorkspace();
   save();
 }
 function title(k, sub, action = "") {
@@ -228,6 +214,8 @@ function page() {
       "calendar",
       "emails",
       "documents",
+      "admin",
+      "clienthub",
       "catalogue",
       "billing",
     ].includes(state.view)
@@ -237,6 +225,10 @@ function page() {
       "Register your first lead in Leads & Enrollment. No sample users or content are loaded.",
     );
   switch (state.view) {
+    case "admin":
+      return adminPage();
+    case "clienthub":
+      return clientHub();
     case "catalogue":
     case "billing":
       return billingPage();
@@ -290,30 +282,24 @@ function clientRow(x) {
 function clientPage() {
   return (
     title(
-      "People, before paperwork.",
-      "Open a record or see the dashboard your client sees.",
+      "Clients",
+      "Choose a person to see their next step.",
+      '<button class="btn primary" data-view="leads">Add Client</button>',
     ) +
-    `<div class="card"><button class="btn" id="create-test-client">Create Test Client</button><p class="small muted">Fictional training only. Real emails, payments and coaching calls are disabled for this profile.</p>${clients.map(clientRow).join("")}</div>`
+    `<div class="card">${
+      clients
+        .filter((x) => !x.isTest)
+        .map(
+          (x) =>
+            `<div class="list-item row"><div class="person"><div class="avatar">${esc(x.initials)}</div><div><strong>${esc(x.name)}</strong><p class="small muted">${esc(clientStage(x.id).label)}</p></div></div><button class="btn" data-client="${x.id}">Open Client</button></div>`,
+        )
+        .join("") ||
+      '<div class="empty">Your clients will appear here. Start with Add Client.</div>'
+    }</div>`
   );
 }
 function habitList(details = false, readonly = false) {
-  return habits()
-    .map(
-      (h, i) =>
-        `<div class="habit"><input type="checkbox" aria-label="${esc(h[1])}" data-habit="${i}" ${readonly ? "disabled" : ""} ${status(i) === "done" ? "checked" : ""}><div class="body"><div class="eyebrow">${esc(h[0])}</div><strong class="${status(i) === "done" ? "completed" : ""}">${esc(h[1])}</strong><div class="small muted">${esc(h[2])}</div><details ${details ? "open" : ""}><summary>${t("Know more", "Aur jaano")}</summary><p class="small"><b>${t("Completion", "Complete kab hoga")}:</b> ${esc(h[3])}<br><b>${t("Chosen block", "Chuna hua block")}:</b> ${esc(h[4])}<br><b>${t("Agreed alternative", "Agreed alternative")}:</b> ${esc(h[5])}<br><b>${t("Evidence", "Evidence")}:</b> ${t("Self-report; no private screenshots required.", "Self-report; private screenshots zaroori nahi.")}</p></details></div><select data-status="${i}" ${readonly ? "disabled" : ""} aria-label="Status for ${esc(h[1])}">${[
-          ["pending", t("Pending", "Baaki")],
-          ["done", t("Done", "Ho gaya")],
-          ["adapted", t("Adapted", "Adapt kiya")],
-          ["rest", t("Rest/recovery", "Rest/recovery")],
-          ["missed", t("Missed", "Miss hua")],
-        ]
-          .map(
-            ([v, l]) =>
-              `<option value="${v}" ${status(i) === v ? "selected" : ""}>${l}</option>`,
-          )
-          .join("")}</select></div>`,
-    )
-    .join("");
+  return groupedHabits(details ? "plan" : readonly ? "summary" : "track");
 }
 function today() {
   if (
@@ -332,7 +318,7 @@ function today() {
         "Chhote, agreed actions. Ek clear agla step.",
       ),
     ) +
-    `<div class="hero"><div class="eyebrow">${t("YOUR IDENTITY", "TUMHARI IDENTITY")} · DAY ${programmeDay(c().id)}</div><h2>${esc(identity())}</h2><p>${esc(clientGoal())}</p></div>${practiceCard()}<div class="grid"><div class="card"><div class="row"><h2>${t("Today’s commitments", "Aaj ki commitments")}</h2><span class="badge green">${done()} / ${habits().length} ${t("done", "ho gaye")}</span></div>${habitList()}</div><aside><div class="card"><div class="eyebrow">${t("NEXT CHECK-IN", "AGLA CHECK-IN")}</div><h2>${t("Pause. Notice. Continue.", "Ruko. Dekho. Aage badho.")}</h2><p class="muted small">${t("Your habit statuses are already here. No need to type them again.", "Habit status apne aap aa jayega. Dobara bharna nahi hai.")}</p>${button(t("Open check-in", "Check-In bharo"), "checkin", "primary")}</div><div class="card"><h3>${t("Learn → apply → review", "Seekho → apply karo → review")}</h3><p class="small muted">${t("Your next application and its outcome stay together in Learn & Apply.", "Apna application aur uska result Learn & Apply mein dekho.")}</p>${button(t("Open journals", "Journals kholo"), "journals", "subtle")}</div><div class="note">${t("Only your assigned records are available. Contact your coach if your plan needs adjustment.", "Yeh demo preview hai. Real account access aur private storage enabled nahi hain.")}</div></aside></div>`
+    `<div class="hero"><div class="eyebrow">${t("YOUR IDENTITY", "TUMHARI IDENTITY")} · DAY ${programmeDay(c().id)}</div><h2>${esc(identity())}</h2><p>${esc(clientGoal())}</p></div>${practiceCard()}<div class="grid"><div class="card"><div class="row"><h2>${t("Today’s commitments", "Aaj ki commitments")}</h2><span class="badge green">${done()} / ${habits().length} ${t("done", "ho gaye")}</span></div>${habitList()}</div><aside><div class="card"><div class="eyebrow">${t("NEXT CHECK-IN", "AGLA CHECK-IN")}</div><h2>${t("Pause. Notice. Continue.", "Ruko. Dekho. Aage badho.")}</h2><p class="muted small">${t("Your habit statuses are already here. No need to type them again.", "Habit status apne aap aa jayega. Dobara bharna nahi hai.")}</p>${button(t("Open check-in", "Check-In bharo"), "checkin", "primary")}</div><div class="card"><h3>${t("Learn → apply → review", "Seekho → apply karo → review")}</h3><p class="small muted">${t("Your next application and its outcome stay together in Learn & Apply.", "Apna application aur uska result Learn & Apply mein dekho.")}</p>${button(t("Open journals", "Journals kholo"), "journals", "subtle")}</div><div class="note">${t("Need to adjust your plan? Contact Rituparna.", "Yeh demo preview hai. Real account access aur private storage enabled nahi hain.")}</div></aside></div>`
   );
 }
 function habitPage() {
@@ -446,14 +432,7 @@ function reports() {
       `<div class="actions">${button("Print / Save PDF", "print", "primary")}${button("Download CSV", "csv")}</div>`,
     ) +
     (state.mode === "coach" ? selector() : "") +
-    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Programme day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>95%</strong><span>No automatic refund decision</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${habits()
-      .map(
-        (h, i) =>
-          `<div class="list-item row"><span>${esc(h[1])}</span><span class="badge">${esc(status(i))}</span></div>`,
-      )
-      .join(
-        "",
-      )}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
+    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Programme day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>95%</strong><span>No automatic refund decision</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${groupedHabits("summary")}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
   );
 }
 function profile() {
@@ -465,7 +444,7 @@ function profile() {
       ),
       "Read-only profile · original intake preserved.",
     ) +
-    `<div class="card"><div class="person"><div class="avatar">${c().initials}</div><div><h2>${esc(c().name)}</h2><span class="muted">${c().background}</span></div></div><div class="resource"><label>30-day goal</label><p>${esc(clientGoal())}</p><label>Identity statement</label><p>${esc(identity())}</p><label>Reported constraint</label><p>${esc(clientDifficulty())}</p></div><span class="badge green">Client Profile</span><p class="small muted">Submitted onboarding answers are preserved. Contact your coach to request a correction.</p>${button(t("Request correction", "Correction request karo"), "correction")}</div><div class="card"><h2>Assigned Plan</h2>${habitList(true, true)}</div>${state.mode === "coach" ? profileEditor() : ""}`
+    `<div class="card"><div class="person"><div class="avatar">${c().initials}</div><div><h2>${esc(c().name)}</h2><span class="muted">${c().background}</span></div></div><div class="resource"><label>30-day goal</label><p>${esc(clientGoal())}</p><label>Identity statement</label><p>${esc(identity())}</p><label>Reported constraint</label><p>${esc(clientDifficulty())}</p></div><span class="badge green">Client Profile</span><p class="small muted">Submitted onboarding answers are preserved. Contact your coach to request a correction.</p>${button(t("Request correction", "Correction request karo"), "correction")}</div><div class="card"><h2>My Plan</h2><p class="small muted">Your agreed targets and any instructions from Rituparna. Daily tracking stays on My Day.</p>${groupedHabits("plan")}</div>${state.intakes[c().id]?.submitted ? `<details class="card"><summary>Original Onboarding Answers</summary>${intakeQuestions.map((q, i) => `<div class="list-item"><strong>${esc(q)}</strong><p>${esc(state.intakes[c().id].answers?.[i] || "")}</p></div>`).join("")}</details>` : ""}${state.agreements[c().id] ? `<details class="card"><summary>Service Agreement Record</summary><p>Acknowledged by ${esc(state.agreements[c().id].name)}.</p><a class="btn" href="/api/pdf/agreement?client=${c().id}">View Service Agreement</a></details>` : ""}${state.mode === "coach" ? profileEditor() : ""}`
   );
 }
 function notes() {
@@ -533,7 +512,7 @@ function bind() {
     (el) =>
       (el.onclick = () => {
         state.client = el.dataset.client;
-        navigate("profile");
+        navigate("clienthub");
       }),
   );
   document.querySelectorAll("[data-preview]").forEach(
@@ -655,7 +634,7 @@ function setStatus(i, value) {
 function editHabit(i) {
   const h = habits()[i];
   $("#editor").innerHTML =
-    `<form id="habit-editor" class="card"><h2>Edit ${esc(h[0])} habit</h2><p class="small muted">Agree significant plan changes with the client before publishing.</p>${["HRCMS pillar", "Short habit name", "Why it matters", "Completion standard", "Client-chosen work block", "Agreed alternative"].map((label, n) => `<div class="field"><label for="habit-field-${n}">${label}</label><input id="habit-field-${n}" name="f${n}" maxlength="1000" value="${esc(h[n])}" required></div>`).join("")}<div class="actions"><button class="btn primary">Save Habit</button><button class="btn" type="button" id="cancel-edit">Cancel</button></div></form>`;
+    `<form id="habit-editor" class="card"><h2>Edit ${esc(h[0])} habit</h2><p class="small muted">Agree significant plan changes with the client before publishing.</p>${["HRCMS pillar", "Short habit name", "Why it matters", "Completion standard", "Client-chosen work block", "Agreed alternative"].map((label, n) => `<div class="field"><label for="habit-field-${n}">${label}</label>${n === 0 ? `<select id="habit-field-${n}" name="f${n}">${pillars.map((p) => `<option ${p === h[n] ? "selected" : ""}>${p}</option>`).join("")}</select>` : `<input id="habit-field-${n}" name="f${n}" maxlength="1000" value="${esc(h[n])}" ${n === 2 || n === 5 ? "" : "required"}>`}</div>`).join("")}<div class="actions"><button class="btn primary">Save Habit</button><button class="btn" type="button" id="cancel-edit">Cancel</button></div></form>`;
   $("#editor").scrollIntoView({ behavior: "smooth" });
   $("#cancel-edit").onclick = () => {
     $("#editor").innerHTML = "";
@@ -720,7 +699,7 @@ function clientGoal() {
   return c().goal || "Goal not assigned.";
 }
 function practiceCard() {
-  return `<section class="card"><div class="eyebrow">IDENTITY INTO ACTION</div><h2>Daily Practices</h2><p>Coach-assigned practices are separate from your HRCMS habits. Affirmations, remembrance and reflection appear only as assigned.</p><div class="actions">${
+  return `<section class="card"><div class="eyebrow">IDENTITY INTO ACTION</div><h2>Daily Practices</h2><p>Your daily practices, at the times agreed with Rituparna.</p><div class="actions">${
     assignedPractices()
       .map((p) => `<span class="badge">${esc(p.name)}</span>`)
       .join("") || '<span class="muted">No practices assigned yet.</span>'
@@ -753,38 +732,7 @@ function restoreDrafts() {
 function translateUI() {
   document.documentElement.lang = "en";
 }
-const intakeQuestions = [
-  "What did your eating, movement, sleep and energy actually look like over the past seven days?",
-  "What one health-related improvement matters most to you, and what observable progress would be realistic within 30 days?",
-  "Describe a recent moment when a thought, feeling or expectation influenced how you cared for your health.",
-  "What existing strengths, routines, resources or support can you use to improve your health?",
-  "What could interfere with your health plan, including knowledge, time, access, health limitations or existing professional guidance?",
-  "What specific health action can you commit to, when and where will you do it, and what will you do if your usual plan is disrupted?",
-  "What did connection, communication and boundaries look like in your important relationships over the past seven days?",
-  "What one improvement in your own relationship behaviour matters most, and what observable progress would you aim for within 30 days?",
-  "Describe a recent interaction where your interpretation or an unspoken expectation influenced your response.",
-  "What strengths, supportive connections or communication practices can you build on?",
-  "What makes your desired relationship behaviour difficult, including skills, circumstances, safety or another person\u2019s choices?",
-  "What specific relationship action can you commit to, when will you practise it, and what will you do if the other person responds differently than you hope?",
-  "What actions and results describe your work, business, study, caregiving or other purposeful activity over the past seven days?",
-  "What one improvement in this area matters most, and what observable progress would be realistic within 30 days?",
-  "Describe a recent moment when uncertainty, feedback or an outcome influenced how you viewed yourself or acted.",
-  "What strengths, skills, experience, resources or connections can you build on?",
-  "What currently limits progress, including knowledge, opportunity, time, resources or a recurring behaviour?",
-  "What specific action can you commit to, when and where will you do it, and what will you do if your first approach is unavailable or unsuccessful?",
-  "What do you currently know about your income or support, spending, savings and financial obligations, and what remains unclear?",
-  "What one financial improvement matters most, and what observable progress would be realistic within 30 days?",
-  "Describe a recent money decision where an emotion, assumption or social expectation influenced your choice.",
-  "What financial habits, knowledge, resources or support can you build on?",
-  "What limits your financial progress, including essential costs, income constraints, access, knowledge or avoidance?",
-  "What specific financial action can you commit to, when will you do it, and what will you do if circumstances disrupt your plan?",
-  "What did remembrance, spiritual learning, shukrana and service actually look like in your life over the past seven days?",
-  "What one change in how you live your spiritual understanding matters most, and what observable progress would you aim for within 30 days?",
-  "Describe a recent situation where expectations, attachment or your understanding of self and Nirankar influenced your response.",
-  "What existing practices, teachings, experiences or supportive community can you build on?",
-  "What makes spiritual understanding difficult to practise in ordinary life, including confusion, habits, circumstances or competing demands?",
-  "What specific spiritual practice and everyday application can you commit to, when will you practise them, and how will you return after a lapse?",
-];
+const intakeQuestions = globalThis.seekIntakeQuestions;
 function clientDifficulty() {
   return c().difficulty || "No constraint recorded yet.";
 }
@@ -863,11 +811,8 @@ function moneyPanel(id) {
 }
 function leadsPage() {
   return (
-    title(
-      "Leads & Enrollment",
-      "Register, prepare onboarding, agree the plan, and activate the programme.",
-    ) +
-    `<div class="grid"><form id="lead-form" class="card"><h2>Register Lead</h2><div class="form-grid">${[
+    title("Add Client", "Enter their details. We will guide the next step.") +
+    `<form id="lead-form" class="card"><h2>Register Lead</h2><div class="form-grid">${[
       ["first", "First Name"],
       ["last", "Last Name"],
       ["email", "Email"],
@@ -879,13 +824,7 @@ function leadsPage() {
       )
       .join(
         "",
-      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><button class="btn primary">Register Lead</button><div class="note">Lead information is stored on the configured server. Email sending requires verified provider and approved business settings.</div></form><div class="card"><h2>Enrollment Sequence</h2><p>Inquiry → $150 deposit → onboarding questions → consultation and plan → client agreement → $350 balance → account invitation → Day 1.</p><p class="small muted">One onboarding week is separate from the 30 tracking days. The remaining $350 is due by the day before the agreed start. A late payment requires a new start date.</p></div></div><div class="card">${clients
-      .map((x) => {
-        const l = state.leads.find((y) => y.id === x.id),
-          p = programme(x.id);
-        return `<div class="list-item"><div class="row"><h3>${esc(x.name)}</h3><span class="badge green">${esc(p.status === "Not Activated" ? (p.balance ? "Ready For Activation" : p.agreed ? "Awaiting Balance" : state.intakes[x.id]?.submitted ? "Plan Preparation" : p.deposit ? "Onboarding" : "Awaiting Deposit") : p.status)}</span></div>${l ? `<p class="small muted">${esc(l.email)} · ${esc(l.phone)} · ${esc(l.source)}</p><a class="btn subtle" href="${esc(firstStepsMail(l))}">Open First-Steps Email Draft</a>` : '<p class="small muted">No email address recorded</p>'}${moneyPanel(x.id)}${documentControls(x.id)}<div class="actions"><button class="btn subtle" data-client="${x.id}">Open Profile</button><button class="btn subtle" data-manage="${x.id}">Manage Programme & Calls</button></div></div>`;
-      })
-      .join("")}</div>`
+      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
   );
 }
 function firstStepsMail(l) {
@@ -915,14 +854,14 @@ function calendarPage() {
   return (
     title(
       "Calendar",
-      "20-minute calls on programme days 3, 6, 9 … 30. Calendar uses UTC; no external calendar is connected.",
+      "Coaching calls and plan deadlines. Times are labelled UTC.",
     ) +
-    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${x.date} · ${x.time} UTC · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Programme Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this view. Activate a programme below, or change the date range.</div>'}</div><div class="card"><h2>Programme Controls</h2><p class="small muted">Confirm deposit, questionnaire, plan agreement and balance in Leads & Enrollment before activation. Choose one agreed recurring time; overlapping calls are rejected. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
+    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${x.date} · ${x.time} UTC · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Programme Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this date range. Calls appear after a programme is activated.</div>'}</div><details class="card"><summary>Manage A Client’s Schedule</summary><h2>Programme Controls</h2><p class="small muted">Complete the client’s enrolment steps before activation. Choose one agreed recurring time; overlapping calls are rejected. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
       .map((x) => {
         const p = programme(x.id);
         return `<form class="programme-form list-item" data-id="${x.id}"><div class="row"><h3>${esc(x.name)}</h3><span class="badge">${esc(p.status)}</span></div><div class="form-grid"><div class="field"><label>Agreed Programme Start</label><input name="start" type="date" value="${p.start}" required></div><div class="field"><label>Agreed Call Time (UTC)</label><input name="time" type="time" value="${p.time}" required></div></div><div class="actions"><button class="btn primary">${p.status === "Not Activated" ? "Activate Programme" : "Update Future Schedule"}</button>${p.status === "Active" ? `<button class="btn" type="button" data-hold="${x.id}">Put On Hold</button>` : ""}${p.status === "On Hold" ? `<button class="btn" type="button" data-resume="${x.id}">Resume Programme</button>` : ""}${["Active", "On Hold"].includes(p.status) ? `<button class="btn" type="button" data-end="${x.id}">End Programme</button>` : ""}</div></form>`;
       })
-      .join("")}</div>`
+      .join("")}</details>`
   );
 }
 function monthGrid(anchor, calls) {
@@ -955,7 +894,7 @@ function practicesPage() {
     title(
       "Daily Practices",
       coach
-        ? "Manually assign the four-window routine separately from HRCMS habits."
+        ? "Set the practices this client will follow at their agreed daily times."
         : "Your assigned practices. Four agreed windows; no repeated long reports.",
     ) +
     (coach ? selector() : "") +
@@ -963,10 +902,10 @@ function practicesPage() {
       assignedPractices()
         .map(
           (p, i) =>
-            `<div class="list-item"><div class="row"><h3>${esc(p.name)}</h3>${coach ? `<button class="btn subtle" data-delete-practice="${i}">Remove Assignment</button>` : ""}</div><p>${esc(p.instructions)}</p><div class="practice-windows">${p.windows.map((w) => (coach ? `<span class="badge">${w}</span>` : `<label><input type="checkbox" data-practice="${esc(p.id)}" data-window="${w}" ${state.practiceTicks[tickKey]?.[p.id + ":" + w] ? "checked" : ""}> ${w}</label>`)).join("")}</div></div>`,
+            `<div class="list-item"><div class="row"><h3>${esc(p.name)}</h3>${coach ? `<button class="btn subtle" data-delete-practice="${i}">Unassign From This Client</button>` : ""}</div><p>${esc(p.instructions)}</p><div class="practice-windows">${p.windows.map((w) => (coach ? `<span class="badge">${w}</span>` : `<label><input type="checkbox" data-practice="${esc(p.id)}" data-window="${w}" ${state.practiceTicks[tickKey]?.[p.id + ":" + w] ? "checked" : ""}> ${w}</label>`)).join("")}</div></div>`,
         )
         .join("") || "<p>No practices assigned.</p>"
-    }</div>${coach ? `<form id="practice-form" class="card"><h2>Assign Practice</h2><div class="field"><label>Practice Name</label><input name="name" required maxlength="200"></div><div class="field"><label>Personalised Instructions</label><textarea name="instructions" required maxlength="5000"></textarea></div><div class="practice-windows">${windows.map((w) => `<label><input type="checkbox" name="windows" value="${w}" checked> ${w}</label>`).join("")}</div><p class="small muted">Assign Simran only where appropriate and agreed. Do not invent sacred wording or impose a practice based on ethnicity.</p><button class="btn primary">Assign To ${esc(c().name)}</button></form>` : ""}`
+    }</div>${coach ? `<form id="practice-form" class="card"><h2>Add A Daily Practice</h2><div class="field"><label>Practice Name</label><input name="name" required maxlength="200"></div><div class="field"><label>Personalised Instructions</label><textarea name="instructions" required maxlength="5000"></textarea></div><div class="practice-windows">${windows.map((w) => `<label><input type="checkbox" name="windows" value="${w}" checked> ${w}</label>`).join("")}</div><p class="small muted">Choose practices together with the client. These are separate from their pillar habits.</p><button class="btn primary">Assign To ${esc(c().name)}</button></form>` : ""}`
   );
 }
 function materials() {
@@ -1074,9 +1013,11 @@ function bindWorkflow() {
     };
     state.leads.push(l);
     registerProfile(l);
+    state.client = l.id;
+    state.view = "clienthub";
     save();
     render();
-    toast("Lead registered. Check Email Center for the next message.");
+    toast("Client added. Review their first email here.");
   });
   document.querySelectorAll("[data-payment]").forEach(
     (b) =>
@@ -1442,14 +1383,14 @@ function syncWork() {
         x.id,
         "slots",
         "Your Plan Is Ready — Book Your Walkthrough",
-        "Your plan is ready for discussion, not attached to this email. Choose one of the four coach-offered slots in Walkthrough Booking. The walkthrough lasts 30 minutes.",
+        "Your plan is ready for discussion, not attached to this email. Reply to this email with your preferred offered time. The walkthrough lasts 30 minutes.",
       );
     if (w.slots?.length && !w.booking)
       enqueue(
         x.id,
         "slot-reminder",
         "Reminder — Choose Your Walkthrough Slot",
-        "Please choose one available walkthrough slot. Slots are rechecked when you book.",
+        "Reply to the email with your chosen time; Rituparna will confirm it.",
         dateAdd(w.slotsAt || day, 2),
       );
     if (w.booking)
@@ -1547,7 +1488,7 @@ function taskList() {
       add(
         "first",
         "Review First Steps & Agreement",
-        l.created.slice(0, 10),
+        (l.created || day).slice(0, 10),
         "emails",
       );
     if (!p.deposit) {
@@ -1626,30 +1567,34 @@ function overview() {
   return workPage();
 }
 function workPage() {
-  const tasks = taskList(),
-    overdue = tasks.filter((t) => !t.waiting && t.due < day),
-    today = tasks.filter((t) => !t.waiting && t.due === day),
+  const allTasks = taskList().filter(
+    (t) => !clients.find((c) => c.id === t.client)?.isTest,
+  );
+  const tasks = allTasks.filter(
+    (t) =>
+      !(
+        t.waiting &&
+        allTasks.some(
+          (other) =>
+            other.client === t.client &&
+            !other.waiting &&
+            other.label.includes("First Steps"),
+        )
+      ),
+  );
+  const urgent = tasks.filter((t) => !t.waiting && t.due <= day),
     later = tasks.filter((t) => !t.waiting && t.due > day),
     waiting = tasks.filter((t) => t.waiting);
+  const events = calendarEvents()
+    .filter((e) => e.date >= day && !clients.find((c) => c.id === e.id)?.isTest)
+    .slice(0, 5);
   return (
-    title(
-      "Today’s Work",
-      "Your next actions, deadlines and client follow-through in one place.",
-    ) +
-    `<div class="stats"><div class="stat"><span>OVERDUE</span><strong>${overdue.length}</strong><span>Needs a revised action</span></div><div class="stat"><span>DUE TODAY</span><strong>${today.length}</strong><span>Clear next steps</span></div><div class="stat"><span>WAITING ON CLIENT</span><strong>${waiting.length}</strong><span>Payments, answers and bookings</span></div><div class="stat"><span>UPCOMING EVENTS</span><strong>${calendarEvents().filter((e) => e.date >= day).length}</strong><span>Calls and work blocks</span></div></div><div class="grid"><section>${taskGroup("Overdue", overdue)}${taskGroup("Due Today", today)}${taskGroup("Upcoming Tasks", later)}<div class="card"><h2>Upcoming Calls & Work Blocks</h2>${
-      calendarEvents()
-        .filter((e) => e.date >= day)
-        .slice(0, 8)
-        .map(
-          (e) =>
-            `<div class="list-item"><strong>${esc(e.label || "Coaching Call")} · ${esc(clients.find((c) => c.id === e.id)?.name)}</strong><div class="small muted">${e.date} · ${e.time} UTC · ${e.nonblocking ? "Deadline" : (e.duration || 20) + " minutes"}</div></div>`,
-        )
-        .join("") || '<p class="muted">No scheduled events yet.</p>'
-    }</div></section><aside>${taskGroup("Waiting On Client", waiting)}<div class="card"><h2>Work & Booking Controls</h2>${selector()}${workflowControls()}<hr><a class="btn subtle" href="/api/export">Download Encrypted Backup</a></div><div class="note">Tasks update from recorded events. Email delivery requires configured sender and approved business terms. Bank verification remains manual; Google Calendar is not connected.</div></aside></div>`
+    title("Today’s Work", "Your next steps, one client at a time.") +
+    `<div class="grid"><section>${urgent.length ? taskGroup("Needs Your Attention", urgent) : '<div class="card"><h2>You’re Up To Date</h2><p class="muted">No actions due right now.</p><button class="btn" data-view="clients">Open Clients</button></div>'}${later.length ? taskGroup("Coming Up", later) : ""}</section><aside>${waiting.length ? taskGroup("Waiting For A Reply", waiting) : ""}${events.length ? `<div class="card"><h2>Upcoming Calls & Work</h2>${events.map((e) => `<div class="list-item"><strong>${esc(clients.find((x) => x.id === e.id)?.name)}</strong><p class="small muted">${e.date} · ${e.time} UTC · ${esc(e.label)}</p><button class="btn subtle" data-client="${e.id}">Open Client</button></div>`).join("")}</div>` : ""}</aside></div>`
   );
 }
 function taskGroup(title, items) {
-  return `<div class="card"><h2>${title}</h2>${items.map((t) => `<div class="list-item"><div class="row"><strong>${esc(clients.find((c) => c.id === t.client)?.name)}</strong><span class="badge">${t.due}</span></div><p>${esc(t.label)}</p><button class="btn subtle" data-task-client="${t.client}" data-task-view="${t.view}">Open Next Action</button></div>`).join("") || '<p class="muted small">Nothing here right now.</p>'}</div>`;
+  return `<div class="card"><h2>${title}</h2>${items.map((t) => `<div class="list-item"><div class="row"><strong>${esc(clients.find((c) => c.id === t.client)?.name)}</strong><span class="badge">${t.due}</span></div><p>${esc(t.label)}</p><button class="btn subtle" data-task-client="${t.client}" data-task-view="clienthub">Open Next Action</button></div>`).join("") || '<p class="muted small">Nothing here right now.</p>'}</div>`;
 }
 function workflowControls() {
   if (!c().id) return "<p>No clients yet. Register a lead to begin.</p>";
@@ -1857,11 +1802,12 @@ function bindServerActions() {
   $("#create-test-client")?.addEventListener("click", async () => {
     try {
       await saveChain;
-      await api("/api/test-client", {
+      const result = await api("/api/test-client", {
         method: "POST",
         headers: { "X-CSRF-Token": window.__session.csrf },
       });
-      location.reload();
+      await refreshWorkspaceState();
+      location.href = "/?preview=" + encodeURIComponent(result.id);
     } catch (e) {
       toast(e.message);
     }
@@ -2059,5 +2005,16 @@ function documentsPage() {
     ) +
     `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. Plan preparation takes three business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
   );
+}
+if (
+  window.__session.role === "coach" &&
+  new URL(location.href).searchParams.has("preview")
+) {
+  const id = new URL(location.href).searchParams.get("preview");
+  if (clients.some((c) => c.id === id && c.isTest)) {
+    state.client = id;
+    state.mode = "client";
+    state.view = "today";
+  }
 }
 render();

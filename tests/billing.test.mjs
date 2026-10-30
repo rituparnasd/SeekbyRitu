@@ -115,6 +115,102 @@ test("catalogue snapshots, integer money, issue/revision immutability and persis
         ),
       /same currency/,
     );
+    await assert.rejects(
+      () =>
+        store.recordPayment({
+          id: issued.id,
+          amount: 1,
+          date: "2026-12-01",
+          method: "Transfer",
+          reference: "PAY1",
+          verified: false,
+        }),
+      /Verify/,
+    );
+    const payment = await db.transaction(() =>
+      store.recordPayment({
+        id: issued.id,
+        amount: 20,
+        date: "2026-12-01",
+        method: "Transfer",
+        reference: "PAY1",
+        verified: true,
+      }),
+    );
+    assert.equal(payment.receipt.amount, 2000);
+    assert.equal(payment.receipt.received, 2000);
+    await assert.rejects(
+      () =>
+        store.recordPayment({
+          id: issued.id,
+          amount: 50,
+          date: "2026-12-01",
+          method: "Transfer",
+          reference: "PAY2",
+          verified: true,
+        }),
+      /outstanding/,
+    );
+    await assert.rejects(
+      () =>
+        store.recordPayment({
+          id: issued.id,
+          amount: 1,
+          date: "2026-12-01",
+          method: "Transfer",
+          reference: "PAY1",
+          verified: true,
+        }),
+      /already/,
+    );
+    assert.equal(
+      (await billingPDF(payment, "receipt")).subarray(0, 4).toString(),
+      "%PDF",
+    );
+    const finalPayment = await store.recordPayment({
+      id: issued.id,
+      amount: 41.92,
+      date: "2026-12-02",
+      method: "Transfer",
+      reference: "PAY2",
+      verified: true,
+    });
+    assert.equal(finalPayment.receipt.received, issued.total);
+    assert.equal(
+      (await store.payments()).find((p) => p.id === payment.id).receipt.amount,
+      2000,
+    );
+    const digital = await store.saveProduct({
+      name: "Workbook",
+      kind: "Product",
+      price: 10,
+      currency: "CAD",
+      tax: 0,
+      approved: true,
+      requiresAgreement: false,
+      terms: "",
+    });
+    const simple = await store.saveDocument(
+      {
+        ...request,
+        requiresAgreement: false,
+        terms: "",
+        items: [
+          {
+            productId: digital.id,
+            name: digital.name,
+            price: 10,
+            quantity: 1,
+            tax: 0,
+          },
+        ],
+      },
+      business,
+    );
+    assert.equal(
+      (await store.issue(simple.id, simple.version)).requiresAgreement,
+      false,
+    );
     const invoice = await billingPDF(issued, "invoice");
     assert.equal(invoice.subarray(0, 4).toString(), "%PDF");
     const agreement = await billingPDF(

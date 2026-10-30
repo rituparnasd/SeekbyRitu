@@ -28,6 +28,7 @@ import { reconcileWorkflow } from "./lib/workflow.mjs";
 import { reportData, reportPDF } from "./lib/reports.mjs";
 import { pdfDocument, agreementText } from "./lib/documents.mjs";
 import { billingStore, billingPDF } from "./lib/billing.mjs";
+import "./public/intake.js";
 import { innerCodeTerms } from "./lib/inner-code-terms.mjs";
 const origin = process.env.APP_ORIGIN || "",
   production = process.env.NODE_ENV !== "test";
@@ -83,6 +84,7 @@ const business = {
     process.env.BUSINESS_ADDRESS ||
     "Unit 706, 342 15 Avenue SW, Calgary, AB T2R 0P9, Canada",
   currency: process.env.BUSINESS_CURRENCY || "CAD",
+  publicAddress: process.env.PUBLIC_BUSINESS_ADDRESS || "",
 };
 const emailProvider = process.env.EMAIL_PROVIDER || "gmail";
 const googleClient = {
@@ -112,6 +114,39 @@ async function mailConfigured() {
     : !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
 }
 const finalTerms = process.env.FINAL_PROGRAMME_TERMS || "";
+async function approvedProgrammeTerms() {
+  const rows = await db.query(
+    "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key='inner-code'",
+  );
+  const product = rows[0] ? crypt.open(rows[0].payload) : null;
+  return product?.approved &&
+    product.terms &&
+    !/to be (agreed|provided|confirmed)|suggested.{0,30}approval|must be finalised|terms.{0,20}pending/i.test(
+      product.terms,
+    )
+    ? product.terms
+    : finalTerms;
+}
+async function requireFullPayment(id) {
+  const p = (await stateRead()).programmes[id];
+  if (!p?.deposit || !p?.balance)
+    fail(
+      403,
+      "Your account opens after the full CAD 500 payment has been verified. Use your private onboarding link before then.",
+    );
+}
+async function onboardingLink(id) {
+  const token = randomToken();
+  const record = {
+    client: id,
+    expires: new Date(Date.now() + 7 * 86400000).toISOString(),
+  };
+  await db.query(
+    "INSERT INTO documents(section,record_key,payload) VALUES('onboarding_links',?,?)",
+    [digest(token), crypt.seal(record)],
+  );
+  return origin + "/?onboarding=" + token;
+}
 const responses = new AsyncLocalStorage();
 let serial = Promise.resolve();
 const exclusive = (fn) => {
@@ -548,6 +583,7 @@ function rateLimit(key) {
     for (const [k, v] of attempts) if (v.until < now) attempts.delete(k);
 }
 async function invitation(id) {
+  await requireFullPayment(id);
   const a = await account(id);
   if (!a) fail(404, "Client account not found");
   const token = randomToken();
@@ -573,6 +609,7 @@ async function ensureAccounts(s) {
   }
 }
 async function financialRecord(s, id, kind, stage) {
+  const finalTerms = await approvedProgrammeTerms();
   const l = s.leads.find((l) => l.id === id);
   if (!l) fail(404, "Client not found");
   const version =
@@ -594,8 +631,11 @@ async function financialRecord(s, id, kind, stage) {
     client: l.first + " " + l.last,
     reference,
     amount: stage === "deposit" ? 150 : 350,
+    paymentDetails: s.programmes[id]?.paymentDetails?.[stage],
     date: (
-      s.programmes[id]?.verifiedAt?.[stage] || new Date().toISOString()
+      s.programmes[id]?.paymentDetails?.[stage]?.date ||
+      s.programmes[id]?.verifiedAt?.[stage] ||
+      new Date().toISOString()
     ).slice(0, 10),
     body: l.isTest
       ? "FICTIONAL TRAINING RECORD — No payment was collected. Not a real invoice, receipt or signed agreement."
@@ -621,14 +661,20 @@ async function financialRecord(s, id, kind, stage) {
   return record;
 }
 async function prepareEmail(id, actor) {
+  const finalTerms = await approvedProgrammeTerms();
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
-  if (e.type === "billing") {
-    const record = (await billingStore(db, crypt, finalTerms).documents()).find(
-      (d) => d.id === e.documentId,
-    );
-    if (!record || record.status !== "Issued" || !record.approved)
+  if (["billing", "billingreceipt"].includes(e.type)) {
+    const record = [
+      ...(await billingStore(db, crypt, finalTerms).documents()),
+      ...(await billingStore(db, crypt, finalTerms).payments()),
+    ].find((d) => d.id === e.documentId);
+    if (
+      !record ||
+      !["Issued", "Receipt"].includes(record.status) ||
+      !record.approved
+    )
       fail(
         409,
         "Issue the reviewed invoice and Service Agreement before emailing",
@@ -658,11 +704,18 @@ async function prepareEmail(id, actor) {
       from: emailProvider === "gmail" ? gmailAddress : process.env.EMAIL_FROM,
       reply_to: gmailAddress,
       to: [record.customer.email],
-      subject: `Your Invoice and Service Agreement — ${record.reference}`,
-      text: `Hello ${record.customer.name},\n\nPlease review your attached invoice and Service Agreement.\nTotal: ${record.currency} ${(record.total / 100).toFixed(2)}\nDue: ${record.due}\n\n${record.payment}\n\n${record.business.name}`,
+      subject: `${record.status === "Receipt" ? "Payment Receipt" : "Your Documents"} — ${record.reference}`,
+      text:
+        record.status === "Receipt"
+          ? `Hello ${record.customer.name},\n\nYour payment receipt is attached.\nReceived: ${record.currency} ${(record.receipt.amount / 100).toFixed(2)}\nRemaining: ${record.currency} ${((record.total - record.receipt.received) / 100).toFixed(2)}\n\n${record.business.name}`
+          : `Hello ${record.customer.name},\n\nPlease review your attached invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}.\nTotal: ${record.currency} ${(record.total / 100).toFixed(2)}\nDue: ${record.due}\n\n${record.payment}\n\n${record.business.name}`,
       attachments: [],
     };
-    for (const kind of ["invoice", "agreement"])
+    for (const kind of record.status === "Receipt"
+      ? ["receipt"]
+      : record.requiresAgreement === false
+        ? ["invoice"]
+        : ["invoice", "agreement"])
       mail.attachments.push({
         filename: `${record.reference}-${kind}.pdf`,
         content: (await billingPDF(record, kind)).toString("base64"),
@@ -682,8 +735,8 @@ async function prepareEmail(id, actor) {
         ? "Connect seekbyritu@gmail.com in Email Center after configuring Google OAuth credentials."
         : "Configure verified email provider in Render",
     );
-  if (finalTerms.length > 3200)
-    fail(409, "Keep the reviewed one-page terms within 3200 characters");
+  if (finalTerms.length > 20000)
+    fail(409, "Keep programme terms within 20000 characters");
   if (!business.name || !business.address || !business.currency || !finalTerms)
     fail(
       409,
@@ -709,13 +762,27 @@ async function prepareEmail(id, actor) {
     if (pending.mail) return { mail: pending.mail };
   }
   let link = "";
-  if (["first", "deposit", "paid"].includes(e.type)) {
+  if (["paid"].includes(e.type)) {
     await ensureAccounts(state);
     const a = await account(e.client);
     link = a?.password ? origin : await invitation(e.client);
   }
+  if (["first", "deposit", "questionnaire-reminder"].includes(e.type))
+    link = await onboardingLink(e.client);
   const cleanBody = String(e.body || "")
     .replaceAll("in this demo", "")
+    .replaceAll(
+      "Sign in through your secure invitation to review the terms before paying.",
+      "Use your private Service Agreement link. No CRM login is needed yet.",
+    )
+    .replaceAll(
+      "Complete the onboarding questionnaire in your account.",
+      "Complete the questionnaire through your private link.",
+    )
+    .replaceAll(
+      "Choose one available walkthrough slot in your account.",
+      "Reply with your chosen offered time.",
+    )
     .replaceAll("Demo payment receipt:", "Payment recorded:")
     .replaceAll("production account setup link", "account setup link")
     .replaceAll("in the demo Booking screen", "in Walkthrough Booking")
@@ -725,8 +792,14 @@ async function prepareEmail(id, actor) {
     to: [lead.email],
     reply_to: process.env.EMAIL_REPLY_TO || "seekbyritu@gmail.com",
     subject: e.subject,
-    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Account / onboarding link: " + link + "\n\n" : ""}${business.name}\n${business.address}\nCurrency: ${business.currency}\n\nProgramme terms:\n${finalTerms}`,
+    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Private link: " + link + "\n\n" : ""}${business.name}\n${business.publicAddress || ""}\nCurrency: ${business.currency}\n\nProgramme terms:\n${finalTerms}`,
   };
+  if (["slots", "slot-reminder"].includes(e.type))
+    mail.text +=
+      "\n\nAvailable Walkthrough Times (UTC):\n" +
+      (state.workflow[e.client]?.slots || [])
+        .map((s) => `${s.date} at ${s.time}`)
+        .join("\n");
   const attachments = [];
   const stage = ["balance", "paid"].includes(e.type) ? "balance" : "deposit";
   if (
@@ -748,6 +821,15 @@ async function prepareEmail(id, actor) {
       content: pdf.toString("base64"),
     });
   }
+  if (e.type === "first")
+    attachments.push({
+      filename: "deposit-invoice.pdf",
+      content: (
+        await pdfDocument(
+          await financialRecord(state, e.client, "invoice", "deposit"),
+        )
+      ).toString("base64"),
+    });
   if (attachments.length) mail.attachments = attachments;
   await db.query(
     "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
@@ -808,7 +890,13 @@ async function sendEmail(id, actor) {
       delivery.status === "Sent"
         ? null
         : delivery.message || "Provider rejected delivery";
-    if (sent) e.sentAt = new Date().toISOString();
+    if (sent) {
+      e.sentAt = new Date().toISOString();
+      if (e.type === "first") {
+        s.workflow[e.client] ??= {};
+        s.workflow[e.client].firstStepsReviewed = true;
+      }
+    }
     await db.query(
       "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
       [id, crypt.seal({ status: e.status, at: e.sentAt, mail: prepared.mail })],
@@ -867,6 +955,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Strict-Transport-Security", "max-age=31536000");
   const path = new URL(req.url, "http://localhost").pathname;
   try {
+    const finalTerms = db ? await approvedProgrammeTerms() : "";
     if (path === "/health")
       return json(res, 200, {
         status: db ? "ok" : "setup_required",
@@ -968,6 +1057,7 @@ const server = http.createServer(async (req, res) => {
             } else a.mfaLast = step;
             await saveAccount(a);
           }
+          if (a.role === "client") await requireFullPayment(a.id);
           const csrf = await newSession(res, a);
           await audit(a.id, "login");
           loginLimiter.success(loginKey);
@@ -983,6 +1073,7 @@ const server = http.createServer(async (req, res) => {
           if (!r[0] || r[0].expires < new Date().toISOString())
             fail(400, "This invitation is expired or has been used");
           const a = await account(r[0].user_id);
+          await requireFullPayment(a.id);
           a.password = await hashPassword(b.password);
           await saveAccount(a);
           await db.query("DELETE FROM invitations WHERE user_id=?", [a.id]);
@@ -1055,6 +1146,111 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(303, { Location: origin + "/" });
         return res.end();
       }
+      if (
+        path === "/api/onboarding-access" &&
+        ["GET", "POST"].includes(req.method)
+      )
+        return await exclusive(async () => {
+          const token = String(req.headers["x-onboarding-token"] || "");
+          if (!/^[A-Za-z0-9_-]{43}$/.test(token))
+            fail(
+              404,
+              "This private link is invalid or expired. Ask Rituparna for a new link.",
+            );
+          const row = (
+            await db.query(
+              "SELECT payload FROM documents WHERE section='onboarding_links' AND record_key=?",
+              [digest(token)],
+            )
+          )[0];
+          const link = row ? crypt.open(row.payload) : null;
+          if (!link || link.expires < new Date().toISOString())
+            fail(
+              404,
+              "This private link has expired. Ask Rituparna for a new link.",
+            );
+          const s = await stateRead(),
+            lead = s.leads.find((l) => l.id === link.client),
+            p = s.programmes[link.client] || {};
+          if (!lead) fail(404, "Client not found");
+          if (p.balance)
+            fail(
+              409,
+              "Onboarding is complete. Use your account activation email to sign in.",
+            );
+          const version = digest(finalTerms);
+          if (req.method === "GET")
+            return json(res, 200, {
+              name: lead.first,
+              terms: finalTerms,
+              version,
+              approved: !!finalTerms,
+              agreement: s.agreements[lead.id] || null,
+              deposit: !!p.deposit,
+              intake: s.intakes[lead.id] || null,
+              questions: globalThis.seekIntakeQuestions,
+            });
+          const b = await body(req);
+          if (b.action === "agree") {
+            if (
+              !finalTerms ||
+              b.version !== version ||
+              b.accept !== true ||
+              !String(b.name || "").trim()
+            )
+              fail(
+                409,
+                "Review the current final Service Agreement before accepting.",
+              );
+            const at = new Date().toISOString();
+            await db.query("INSERT INTO signatures(id,payload) VALUES(?,?)", [
+              randomUUID(),
+              crypt.seal({
+                client: lead.id,
+                name: String(b.name).slice(0, 200),
+                version,
+                text: finalTerms,
+                at,
+                type: "private_link_acknowledgement",
+              }),
+            ]);
+            s.agreements[lead.id] = {
+              name: String(b.name).slice(0, 200),
+              version,
+              at,
+            };
+          } else if (b.action === "intake") {
+            if (!p.deposit)
+              fail(
+                403,
+                "The questionnaire opens after your deposit is verified.",
+              );
+            if (s.intakes[lead.id]?.submitted)
+              fail(
+                409,
+                "Your answers have already been submitted and are preserved.",
+              );
+            if (
+              !Array.isArray(b.answers) ||
+              b.answers.length !== 30 ||
+              b.answers.some(
+                (a) => typeof a !== "string" || a.length > 10000,
+              ) ||
+              (b.submit && b.answers.some((a) => !a.trim()))
+            )
+              fail(
+                400,
+                "Complete each questionnaire answer before submitting.",
+              );
+            s.intakes[lead.id] = {
+              answers: b.answers,
+              ...(b.submit ? { submitted: new Date().toISOString() } : {}),
+            };
+          } else fail(400, "Unknown onboarding action");
+          await stateWrite(s);
+          await audit(lead.id, "private_onboarding_" + b.action);
+          return json(res, 200, { ok: true });
+        });
       const auth = await session(req);
       if (!auth) fail(401, "Sign in required");
       if (
@@ -1063,6 +1259,8 @@ const server = http.createServer(async (req, res) => {
       )
         fail(403, "Invalid request token");
       const a = auth.account;
+      if (a.role === "client" && path !== "/api/logout")
+        await requireFullPayment(a.id);
       if (path === "/api/billing" || path.startsWith("/api/billing/")) {
         if (a.role !== "coach") fail(403, "Coach access required");
         const store = billingStore(db, crypt, finalTerms || innerCodeTerms);
@@ -1071,18 +1269,22 @@ const server = http.createServer(async (req, res) => {
             json(res, 200, {
               products: await store.products(),
               documents: await store.documents(),
+              payments: await store.payments(),
             }),
           );
         if (path === "/api/billing/pdf" && req.method === "GET") {
           const url = new URL(req.url, "http://localhost");
-          const record = (await store.documents()).find(
-            (d) => d.id === url.searchParams.get("id"),
-          );
+          const record = [
+            ...(await store.documents()),
+            ...(await store.payments()),
+          ].find((d) => d.id === url.searchParams.get("id"));
           if (!record) fail(404, "Document not found");
           const kind =
             url.searchParams.get("kind") === "agreement"
               ? "agreement"
-              : "invoice";
+              : url.searchParams.get("kind") === "receipt"
+                ? "receipt"
+                : "invoice";
           res.writeHead(200, {
             "Content-Type": "application/pdf",
             "Content-Disposition": `inline; filename="${record.reference || "draft"}-${kind}.pdf"`,
@@ -1099,13 +1301,16 @@ const server = http.createServer(async (req, res) => {
               result = await store.saveDocument(b, business);
             else if (path === "/api/billing/issue")
               result = await store.issue(b.id, b.version);
+            else if (path === "/api/billing/payment")
+              result = await store.recordPayment(b);
             else if (path === "/api/billing/revise")
               result = await store.revise(b.id);
             else if (path === "/api/billing/queue") {
-              const record = (await store.documents()).find(
-                (d) => d.id === b.id,
-              );
-              if (!record || record.status !== "Issued")
+              const record = [
+                ...(await store.documents()),
+                ...(await store.payments()),
+              ].find((d) => d.id === b.id);
+              if (!record || !["Issued", "Receipt"].includes(record.status))
                 fail(409, "Issue the documents before preparing an email");
               const s = await stateRead(),
                 lead = s.leads.find(
@@ -1122,10 +1327,14 @@ const server = http.createServer(async (req, res) => {
                 client: lead?.id || "",
                 recipient: record.customer.name,
                 documentId: record.id,
-                type: "billing",
+                type:
+                  record.status === "Receipt" ? "billingreceipt" : "billing",
                 manualOnly: true,
-                subject: `Your Invoice and Service Agreement — ${record.reference}`,
-                body: `To: ${record.customer.email}. Attached: invoice and Service Agreement. Total: ${record.currency} ${(record.total / 100).toFixed(2)}. Due: ${record.due}. ${record.payment}`,
+                subject: `${record.status === "Receipt" ? "Payment Receipt" : "Your Documents"} — ${record.reference}`,
+                body:
+                  record.status === "Receipt"
+                    ? `To: ${record.customer.email}. Attached: verified payment receipt. Received: ${record.currency} ${(record.receipt.amount / 100).toFixed(2)}. Remaining: ${record.currency} ${((record.total - record.receipt.received) / 100).toFixed(2)}.`
+                    : `To: ${record.customer.email}. Attached: invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}. Total: ${record.currency} ${(record.total / 100).toFixed(2)}. Due: ${record.due}. ${record.payment}`,
                 due: day(),
                 status: "Draft",
               };
@@ -1141,7 +1350,11 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, {
           terms: finalTerms || agreementText(business),
           approved: !!finalTerms,
-          business,
+          business: {
+            name: business.name,
+            currency: business.currency,
+            publicAddress: business.publicAddress,
+          },
         });
       if (path === "/api/me")
         return json(res, 200, {
@@ -1316,6 +1529,15 @@ const server = http.createServer(async (req, res) => {
               "Test client ready. No real emails or payments are triggered.",
           });
         });
+      if (path === "/api/onboarding-link" && req.method === "POST")
+        return await exclusive(async () => {
+          if (a.role !== "coach") fail(403, "Coach access required");
+          const b = await body(req),
+            s = await stateRead();
+          if (!s.leads.some((l) => l.id === b.id))
+            fail(404, "Client not found");
+          return json(res, 200, { link: await onboardingLink(b.id) });
+        });
       if (path === "/api/invite" && req.method === "POST")
         return await exclusive(async () => {
           const b = await body(req),
@@ -1385,8 +1607,26 @@ const server = http.createServer(async (req, res) => {
           fail(404, "Document not found");
         if (kind === "receipt" && !s.programmes[id]?.[stage])
           fail(409, "Payment has not been confirmed");
-        const record = await financialRecord(s, id, kind, stage),
-          reference = record.reference;
+        let record = await financialRecord(s, id, kind, stage);
+        if (kind === "agreement" && s.agreements[id]?.version) {
+          const signatures = (
+            await db.query("SELECT payload FROM signatures")
+          ).map((r) => crypt.open(r.payload));
+          const signature = signatures.find(
+            (sig) =>
+              (sig.client === id || sig.account === id) &&
+              sig.version === s.agreements[id].version,
+          );
+          if (signature)
+            record = {
+              ...record,
+              body: signature.text,
+              acknowledgement: { name: signature.name, at: signature.at },
+              reference:
+                "SEEK-ACK-" + signature.version.slice(0, 12).toUpperCase(),
+            };
+        }
+        const reference = record.reference;
         const pdf = await pdfDocument(record);
         res.writeHead(200, {
           "Content-Type": "application/pdf",
@@ -1449,8 +1689,8 @@ const server = http.createServer(async (req, res) => {
       }
       if (path === "/api/agreement" && req.method === "POST")
         return await exclusive(async () => {
-          if (finalTerms.length > 3200)
-            fail(409, "Approved one-page terms exceed the configured limit");
+          if (finalTerms.length > 20000)
+            fail(409, "Programme terms exceed the supported limit");
           if (
             !finalTerms ||
             !business.name ||
@@ -1497,6 +1737,8 @@ const server = http.createServer(async (req, res) => {
       "/style.css": "style.css",
       "/app.js": "app.js",
       "/billing.js": "billing.js",
+      "/workspace.js": "workspace.js",
+      "/intake.js": "intake.js",
       "/assets/fonts/OpenSans-Semibold.ttf":
         "assets/fonts/OpenSans-Semibold.ttf",
       "/auth.js": "auth.js",
@@ -1534,42 +1776,13 @@ const server = http.createServer(async (req, res) => {
     });
   }
 });
-// One-time, user-requested additive training profile for an already configured owner.
-if (db)
-  try {
-    await exclusive(async () => {
-      const marker = "requested_test_profile_v1";
-      if (
-        (await db.query("SELECT value FROM metadata WHERE name=?", [marker]))[0]
-      )
-        return;
-      const accounts = await db.query("SELECT payload FROM accounts");
-      const owner = accounts
-        .map((r) => crypt.open(r.payload))
-        .find((a) => a.role === "coach");
-      if (!owner) return;
-      const s = await stateRead();
-      addTestClient(s);
-      await ensureAccounts(s);
-      await stateWrite(s);
-      await db.query("INSERT INTO metadata(name,value) VALUES(?,?)", [
-        marker,
-        "completed",
-      ]);
-      await audit(owner.id, "requested_test_client_added");
-    });
-  } catch {
-    console.error(
-      "Training profile could not be created; coach can use Create Test Client instead.",
-    );
-  }
 // A restart after a provider request cannot prove delivery failed. Require review.
 if (db)
   await exclusive(async () => {
     const s = await stateRead();
     let changed = false;
     for (const e of Object.values(s.outbox)) {
-      if (e.type !== "billing") continue;
+      if (!["billing", "billingreceipt"].includes(e.type)) continue;
       const row = (
         await db.query("SELECT payload FROM deliveries WHERE id=?", [e.id])
       )[0];

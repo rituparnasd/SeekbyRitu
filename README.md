@@ -123,3 +123,17 @@ Save a draft, preview both PDFs, then issue reviewed documents. Issued records r
 **Prepare Email** adds a manually sent message to Email Center with the invoice and Service Agreement PDF attachments. It never sends automatically, even when `MAIL_AUTOMATION=true`. Delivery uses the existing configured provider; uncertain deliveries require review in Gmail Sent. Fictional test customers cannot receive live mail. Product-specific terms must be reviewed for each customer; existing programme enrollment terms are not silently replaced by catalogue edits.
 
 Catalogue and billing records use encrypted `documents` rows, are excluded from client state and are included in the existing encrypted backup export. No additional Render environment variables are needed. Tax rates must be entered explicitly; a default 0% does not establish exemption.
+
+### Guided coaching workspace
+
+Main navigation is Today, Clients, Calendar, Products & Services, Billing and Admin. Client-specific work belongs inside the selected client's record. Admin holds Gmail settings, encrypted backups and the explicitly requested sample preview. Live startup no longer creates a fictional client. Existing sample records are preserved and hidden from the normal client list.
+
+Clients receive no usable CRM invitation or login before **both** CAD 150 deposit and CAD 350 balance are recorded as verified. Seven-day private onboarding links grant only access to that client's Service Agreement acknowledgement and questionnaire; they never create a session. Submitted answers are preserved and trigger the existing three-business-day plan deadline. The coach offers walkthrough times by email and records the client's choice in their record. The full account setup link is supplied after balance verification. Old pre-payment sessions/invitations are blocked by the same server-side payment gate.
+
+The reviewed Inner Code template in Products & Services supplies programme terms; `FINAL_PROGRAMME_TERMS` remains a fallback. Templates with unresolved placeholders remain drafts. Private-link acknowledgement records the exact terms and version; it is not independent identity verification.
+
+Daily habits use compact pillar groups. Optional habit explanations appear in My Profile → My Plan rather than being repeated in daily tracking. Coaching calendar times remain explicitly UTC; external Google Calendar synchronization is not configured.
+
+Billing supports optional Service Agreements (for example, a simple product may need only an invoice), partial verified payments and immutable numbered receipt snapshots. `Record Payment` requires coach verification, date, method and transaction reference; it rejects duplicate references and overpayments. Generic billing payments do not silently activate Inner Code coaching; use the client's guided enrolment verification for programme activation. Catalogue, invoice and receipt history survive product edits and are included in encrypted backups.
+
+A private business address is not printed on newly generated customer PDFs or email signatures by default. Set optional `PUBLIC_BUSINESS_ADDRESS` to a suitable public mailing address when needed. This display choice does not establish compliance with applicable tax or consumer-contract requirements. Existing issued documents are not rewritten.

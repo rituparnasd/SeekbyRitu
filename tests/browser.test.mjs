@@ -116,7 +116,32 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await page
       .getByRole("button", { name: "Create Revision", exact: true })
       .waitFor();
+    await page
+      .getByRole("button", { name: "Record Verified Payment", exact: true })
+      .click();
+    await page.locator('#billing-receipt-form [name="amount"]').fill("10");
+    await page
+      .locator('#billing-receipt-form [name="method"]')
+      .fill("Fixture transfer");
+    await page
+      .locator('#billing-receipt-form [name="reference"]')
+      .fill("FIXTURE-PAY-1");
+    await page.locator('#billing-receipt-form [name="verified"]').check();
+    await page
+      .getByRole("button", {
+        name: "Record Payment & Create Receipt",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole("link", { name: "View Receipt", exact: true })
+      .waitFor();
     const billing = await page.evaluate(() => api("/api/billing"));
+    assert.equal(billing.payments[0].receipt.amount, 1000);
+    const receiptPDF = await page.request.get(
+      `${origin}/api/billing/pdf?id=${billing.payments[0].id}&kind=receipt`,
+    );
+    assert.equal((await receiptPDF.body()).subarray(0, 4).toString(), "%PDF");
     assert.equal(billing.documents[0].total, 2099);
     const invoicePDF = await page.request.get(
       `${origin}/api/billing/pdf?id=${billing.documents[0].id}&kind=invoice`,
@@ -132,9 +157,17 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       await page.getByText("Daniel Brooks", { exact: true }).count(),
       0,
     );
-    await page.locator('[data-view="documents"]').first().click();
-    assert.equal(await page.locator('a[href^="/api/template/"]').count(), 5);
-    await page.locator('[data-view="leads"]').first().click();
+    assert.equal(await page.locator(".sidebar .nav button").count(), 6);
+    assert.equal(
+      await page
+        .locator(
+          '.sidebar [data-view="documents"],.sidebar [data-view="agreement"]',
+        )
+        .count(),
+      0,
+    );
+    await page.locator('[data-view="clients"]').first().click();
+    await page.getByRole("button", { name: "Add Client", exact: true }).click();
     for (const [n, v] of Object.entries({
       first: "Temporary",
       last: "Fixture",
@@ -166,12 +199,17 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     }
     // Exercise dense forms and long client content at phone and desktop widths.
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('[data-view="admin"]').first().click();
     await page.locator("#create-test-client").click();
     await page.waitForFunction(() =>
       [...document.querySelectorAll("#persona option")].some((o) =>
         o.textContent.includes("Aarav"),
       ),
     );
+    await page.evaluate(() => {
+      state.mode = "coach";
+      render();
+    });
     for (const width of [375, 700, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       for (const view of [
@@ -188,7 +226,8 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
         "profile",
         "agreement",
         "notes",
-        "documents",
+        "clienthub",
+        "admin",
         "catalogue",
         "billing",
       ]) {
