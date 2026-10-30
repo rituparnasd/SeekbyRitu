@@ -37,6 +37,12 @@ function clientStage(id) {
   if (p.status === "On Hold") return { label: "On Hold", view: "calendar" };
   if (p.status === "Ended")
     return { label: "Programme Ended", view: "reports" };
+  if (p.balance && p.status !== "Active")
+    return {
+      label:
+        w.activationIssue || "Payment Complete · Check Programme Activation",
+      view: "calendar",
+    };
   if (p.balance)
     return {
       label: p.start > day ? "Starting Soon" : "Programme Active",
@@ -98,7 +104,7 @@ function clientHub() {
         ? '<a class="btn primary" href="#booking-controls">Offer Walkthrough Slots</a>'
         : next.walkthrough
           ? '<button class="btn primary" data-walkthrough-done>Record Walkthrough Completed</button>'
-          : `<button class="btn primary" data-view="${next.view || "habits"}">${next.view === "reports" ? "View Progress" : "Open Plan"}</button>`;
+          : `<button class="btn primary" data-view="${next.view || "habits"}">${next.view === "reports" ? "View Progress" : next.view === "calendar" ? "Check Schedule" : "Open Plan"}</button>`;
   const doneSteps = [
     !!p.deposit,
     !!state.intakes[x.id]?.submitted,

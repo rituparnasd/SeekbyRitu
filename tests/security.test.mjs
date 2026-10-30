@@ -232,6 +232,20 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       ).status,
       403,
     );
+    const invalidHabits = structuredClone(data.state);
+    invalidHabits.records[
+      "client-one:" + new Date().toISOString().slice(0, 10)
+    ] = { 999: "done" };
+    assert.equal(
+      (
+        await request("/api/state", {
+          ...client,
+          method: "PUT",
+          body: { revision: data.revision, state: invalidHabits },
+        })
+      ).status,
+      400,
+    );
     data.state.notes["client-one"] = "INJECTED";
     data.state.journals["client-two"] = { daily: { body: "INJECTED" } };
     data.state.materialProgress["client-one"] = {

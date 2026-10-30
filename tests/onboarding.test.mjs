@@ -5,7 +5,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import { totp } from "../lib/security.mjs";
+import { totp, encryption, digest } from "../lib/security.mjs";
+import { DatabaseSync } from "node:sqlite";
 test("private onboarding never grants CRM login before full verified payment", async () => {
   const dir = await mkdtemp(join(tmpdir(), "seek-private-")),
     origin = "http://127.0.0.1:3194",
@@ -102,6 +103,50 @@ test("private onboarding never grants CRM login before full verified payment", a
       body: { id: "new" },
     });
     const capability = new URL(link.data.link).searchParams.get("onboarding");
+    const extra = await request("/api/onboarding-link", {
+      ...owner,
+      method: "POST",
+      body: { id: "new" },
+    });
+    const expiredToken = new URL(extra.data.link).searchParams.get(
+      "onboarding",
+    );
+    const fixtureDb = new DatabaseSync(join(dir, "db"));
+    fixtureDb
+      .prepare(
+        "UPDATE documents SET payload=? WHERE section='onboarding_links' AND record_key=?",
+      )
+      .run(
+        encryption(env.DATA_ENCRYPTION_KEY).seal({
+          client: "new",
+          expires: "2000-01-01T00:00:00Z",
+        }),
+        digest(expiredToken),
+      );
+    fixtureDb.close();
+    assert.equal(
+      (await request("/api/onboarding-access", { token: expiredToken })).status,
+      404,
+    );
+    assert.equal(
+      (
+        await fetch(origin + "/api/onboarding-access", {
+          method: "POST",
+          headers: {
+            Origin: "https://other.example",
+            "Content-Type": "application/json",
+            "X-Onboarding-Token": capability,
+          },
+          body: JSON.stringify({
+            action: "agree",
+            name: "Injected",
+            accept: true,
+          }),
+        })
+      ).status,
+      403,
+    );
+
     assert.equal(
       (await request("/api/onboarding-access", { token: "wrong" })).status,
       404,
@@ -113,6 +158,21 @@ test("private onboarding never grants CRM login before full verified payment", a
     assert.equal(access.cookie, undefined);
     assert.equal(access.data.questions.length, 30);
     assert(!JSON.stringify(access.data).includes("PRIVATE COACH NOTES"));
+    assert.equal(
+      (
+        await request("/api/onboarding-access", {
+          method: "POST",
+          token: capability,
+          body: {
+            action: "agree",
+            accept: true,
+            name: "New Client",
+            version: "stale-version",
+          },
+        })
+      ).status,
+      409,
+    );
     assert.equal(
       (
         await request("/api/onboarding-access", {

@@ -205,6 +205,26 @@ function selector() {
 }
 function page() {
   if (
+    state.mode === "client" &&
+    !["Active", "On Hold", "Ended"].includes(programme(c().id).status) &&
+    !["profile", "reports"].includes(state.view)
+  )
+    return title(
+      "Your Programme Is Not Active Yet",
+      "Your payment and programme setup are being confirmed. Rituparna will let you know when tracking opens.",
+    );
+  if (
+    state.mode === "client" &&
+    ["On Hold", "Ended"].includes(programme(c().id).status) &&
+    !["profile", "reports"].includes(state.view)
+  )
+    return title(
+      programme(c().id).status === "On Hold"
+        ? "Your Programme Is On Hold"
+        : "Your Programme Has Ended",
+      "Daily submissions are paused. Contact Rituparna for the next step.",
+    );
+  if (
     !clients.length &&
     ![
       "overview",
@@ -1154,7 +1174,16 @@ function bindWorkflow() {
           0,
           Math.round((Date.parse(day) - Date.parse(p.held)) / 86400000),
         );
-        p.calls = (p.calls || []).map((x) =>
+        const scheduled =
+          p.calls ||
+          Array.from({ length: 10 }, (_, i) => ({
+            id,
+            number: i + 1,
+            programmeDay: (i + 1) * 3,
+            date: dateAdd(p.start, (i + 1) * 3 - 1),
+            time: p.time,
+          }));
+        p.calls = scheduled.map((x) =>
           x.date >= p.held ? { ...x, date: dateAdd(x.date, shift) } : x,
         );
         p.start = dateAdd(p.start, shift);

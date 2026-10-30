@@ -1,3 +1,4 @@
+import { habitStatuses } from "./lib/client-records.mjs";
 import { addTestClient } from "./lib/test-client.mjs";
 import { LoginLimiter } from "./lib/login-limiter.mjs";
 import { setupDiagnosis } from "./lib/setup-diagnostics.mjs";
@@ -487,7 +488,10 @@ async function mergeClient(old, incoming, a) {
     for (const [k, v] of Object.entries(incoming[section] || {})) {
       if (!k.startsWith(id + ":")) continue;
       if (k.split(":")[1] !== day()) continue;
-      s[section][k] = v;
+      s[section][k] =
+        section === "records"
+          ? habitStatuses(v, (s.customPlans[id] || []).length)
+          : v;
     }
   if (incoming.journals?.[id]) {
     s.journals[id] ??= {};
