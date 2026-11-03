@@ -70,6 +70,58 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       .waitFor();
     assert.equal(loginRequests, 1);
     assert.equal(await page.locator("#persona option").count(), 1);
+    await page.locator('[data-view="admin"]').click();
+    await page.locator("#run-live-check").click();
+    await page
+      .getByText(
+        "Review in Products & Services: Self-Guided, Guided Coaching, Premium Inner Code",
+        { exact: false },
+      )
+      .waitFor();
+    let testEmail = null;
+    await page.route("**/api/gmail/test", async (route) => {
+      if (route.request().method() === "POST")
+        testEmail = {
+          id: "browser-inbox-reference",
+          status: "Sent",
+          acceptedAt: new Date().toISOString(),
+        };
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(testEmail),
+      });
+    });
+    await page.route("**/api/gmail/test-confirm", async (route) => {
+      assert.deepEqual(route.request().postDataJSON(), {
+        id: "browser-inbox-reference",
+        received: true,
+      });
+      testEmail.confirmedAt = new Date().toISOString();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(testEmail),
+      });
+    });
+    await page
+      .getByRole("button", { name: "Test Email Delivery", exact: true })
+      .click();
+    await page
+      .getByText("No inbox test recorded yet.", { exact: true })
+      .waitFor();
+    await page.locator("#send-inbox-test").click();
+    await page.locator("#confirm-inbox-test").waitFor();
+    assert.match(
+      await page.locator("#inbox-test-status").textContent(),
+      /Provider accepted/,
+    );
+    await page.locator("#confirm-inbox-test").click();
+    await page
+      .getByText("Receipt confirmed by you.", { exact: true })
+      .waitFor();
+    await page.unroute("**/api/gmail/test");
+    await page.unroute("**/api/gmail/test-confirm");
     await page.locator('[data-view="catalogue"]').click();
     await page.locator("#new-product").click();
     await page.locator("#product-name").fill("Fixture Workshop");

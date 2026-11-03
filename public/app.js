@@ -859,18 +859,6 @@ function leadsPage() {
       )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><div class="field"><label for="lead-package">Inner Code Package</label><select id="lead-package" name="packageId">${innerCodePackages.all.map((p) => `<option value="${p.id}" ${p.id === "inner-code" ? "selected" : ""}>${p.name} · CAD ${p.price} · ${p.market}</option>`).join("")}</select></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
   );
 }
-function firstStepsMail(l) {
-  return (
-    "mailto:" +
-    encodeURIComponent(l.email) +
-    "?subject=" +
-    encodeURIComponent("Seek by Ritu — Your First Steps") +
-    "&body=" +
-    encodeURIComponent(
-      `Hello ${l.first},\n\nWelcome to Seek by Ritu. Your programme includes one onboarding week followed by 30 coaching days.\n\n1. Review and accept the final programme and payment terms.\n2. Pay the $150 deposit using the instructions Ritu provides.\n3. After payment confirmation, complete the private onboarding questionnaire supplied by Ritu.\n4. We will discuss your personalised habits, daily practices, resources and work blocks.\n5. The remaining $350 is due by the day before your agreed programme start date.\n\nThis is a draft: currency, approved payment destination, final terms and private questionnaire link must be added before sending.\n\nRitu\nSeek by Ritu`,
-    )
-  );
-}
 function calendarPage() {
   const mode = state.calendarMode || "Week",
     anchor = state.calendarDate || day;
@@ -1756,7 +1744,7 @@ function bindTasks() {
 }
 
 function documentControls(id) {
-  return `<div class="actions"><a class="btn subtle" href="/api/pdf/agreement?client=${encodeURIComponent(id)}">One-Page Agreement PDF</a><a class="btn subtle" href="/api/pdf/invoice?client=${encodeURIComponent(id)}&stage=deposit">Deposit Invoice</a><a class="btn subtle" href="/api/pdf/receipt?client=${encodeURIComponent(id)}&stage=deposit">Deposit Receipt</a><a class="btn subtle" href="/api/pdf/invoice?client=${encodeURIComponent(id)}&stage=balance">Balance Invoice</a><a class="btn subtle" href="/api/pdf/receipt?client=${encodeURIComponent(id)}&stage=balance">Balance Receipt</a><button class="btn subtle" data-invite-client="${esc(id)}">Create Secure Account Link</button></div>`;
+  return `<div class="actions"><a class="btn subtle" href="/api/pdf/agreement?client=${encodeURIComponent(id)}">Service Agreement PDF</a><a class="btn subtle" href="/api/pdf/invoice?client=${encodeURIComponent(id)}&stage=deposit">Deposit Invoice</a><a class="btn subtle" href="/api/pdf/receipt?client=${encodeURIComponent(id)}&stage=deposit">Deposit Receipt</a><a class="btn subtle" href="/api/pdf/invoice?client=${encodeURIComponent(id)}&stage=balance">Balance Invoice</a><a class="btn subtle" href="/api/pdf/receipt?client=${encodeURIComponent(id)}&stage=balance">Balance Receipt</a><button class="btn subtle" data-invite-client="${esc(id)}">Create Secure Account Link</button></div>`;
 }
 function emailsPage() {
   return (
@@ -1764,7 +1752,7 @@ function emailsPage() {
       "Email Center",
       "Review templates and event-generated messages. Delivery uses the configured verified sender.",
     ) +
-    `<div class="card"><h2>Gmail Connection</h2><p>Sender and replies: <strong>seekbyritu@gmail.com</strong></p><p>Connect through Google authorisation. No Gmail password is stored.</p><div class="actions"><button class="btn primary" id="gmail-connect">Connect / Reconnect Gmail</button><button class="btn" id="gmail-disconnect">Disconnect Gmail</button></div><div id="gmail-status"></div></div><div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrolment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
+    `<div class="card"><h2>Gmail Connection</h2><p>Sender and replies: <strong>seekbyritu@gmail.com</strong></p><p>Connect through Google authorisation. No Gmail password is stored.</p><div class="actions"><button class="btn primary" id="gmail-connect">Connect / Reconnect Gmail</button><button class="btn" id="gmail-disconnect">Disconnect Gmail</button></div><div id="gmail-status"></div></div><div class="card"><h2>Test Inbox Delivery</h2><p>Send one test to seekbyritu@gmail.com. Then check Inbox or Spam and confirm the matching reference below. No client is contacted.</p><button class="btn" id="send-inbox-test">Send Test Email To My Gmail</button><div id="inbox-test-status" aria-live="polite"></div></div><div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrolment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
       Object.values(state.outbox || {})
         .map(
           (e) =>
@@ -1775,14 +1763,30 @@ function emailsPage() {
     }</div>`
   );
 }
+const agreementDetails = new Map();
 function agreement() {
+  const clientId = c().id;
+  const cfg = packageFor(clientId);
+  if (!agreementDetails.has(clientId)) {
+    agreementDetails.set(clientId, { loading: true });
+    api("/api/terms?client=" + encodeURIComponent(clientId))
+      .then((result) => {
+        agreementDetails.set(clientId, result);
+        if (state.view === "agreement") render();
+      })
+      .catch((error) => {
+        agreementDetails.set(clientId, { error: error.message });
+        if (state.view === "agreement") render();
+      });
+  }
+  const detail = agreementDetails.get(clientId);
   return (
     title(
       "Service Agreement",
       "Review the exact final terms before accepting or paying. Draft terms are not approved for enrolment.",
     ) +
     (state.mode === "coach" ? selector() : "") +
-    `<div class="card"><h2>One Week Of Onboarding + 30 Coaching Days</h2><p>Total: $500 — $150 deposit and $350 programme fee. Currency, refund conditions, cancellation and the proposed 95% eligibility definition require final business approval.</p><a class="btn" href="/api/pdf/agreement?client=${encodeURIComponent(c().id)}">Download Agreement PDF</a><div class="note">${window.__config.businessConfigured ? "Approved terms are configured on the server. Download and review them." : "Final approved terms are not configured. Acceptance and enrolment are blocked."}</div>${state.mode !== "coach" ? '<form id="final-agreement-form"><label>Your Full Name</label><input name="name" required maxlength="150"><label><input type="checkbox" name="accept" required> I have reviewed and agree to the final document.</label><button class="btn primary">Record Account-Authenticated Acknowledgement</button></form>' : ""}<p class="small muted">This records the authenticated account, exact terms version and server timestamp. It is not third-party identity verification or a guarantee of legal enforceability.</p></div>`
+    `<div class="card"><h2>${esc(cfg.name)} · 30-Day Programme</h2><p>Total: CAD ${cfg.price}. ${cfg.deposit ? "CAD 150 deposit, then CAD 350 after the walkthrough. Eligible deposit return requires 95% completion and the agreed call attendance conditions; return within five business days." : "Full payment before account access. No refundable accountability deposit."} ${cfg.calls ? `${cfg.calls} private 20-minute calls.` : "No private coaching calls."}</p><a class="btn" href="/api/pdf/agreement?client=${encodeURIComponent(c().id)}">Download Agreement PDF</a><div class="note">${detail.loading ? "Checking this package’s Service Agreement…" : detail.error ? esc(detail.error) : detail.approved ? "Approved terms for this package are ready. Download and review them." : "This package’s terms still need review in Products & Services. Acceptance and enrolment are blocked."}</div>${state.mode !== "coach" && detail.approved ? '<form id="final-agreement-form"><label>Your Full Name</label><input name="name" required maxlength="150"><label><input type="checkbox" name="accept" required> I have reviewed and agree to the final document.</label><button class="btn primary">Record Account-Authenticated Acknowledgement</button></form>' : ""}<p class="small muted">This records the authenticated account, exact terms version and server timestamp. It is not third-party identity verification or a guarantee of legal enforceability.</p></div>`
   );
 }
 function bindServerActions() {
@@ -1799,6 +1803,53 @@ function bindServerActions() {
       toast(e.message);
     }
   });
+  if ($("#inbox-test-status")) {
+    const showTest = (record) => {
+      const el = $("#inbox-test-status");
+      if (!el) return;
+      if (!record) {
+        el.textContent = "No inbox test recorded yet.";
+        return;
+      }
+      el.innerHTML = `<p>${esc(record.status === "Sent" ? "Provider accepted the test" : record.status)} · Reference: ${esc(record.id)}</p>${record.confirmedAt ? "<p>Receipt confirmed by you.</p>" : ["Sent", "Unknown"].includes(record.status) ? '<p>Check the matching reference in Gmail. If it is in Spam, move it to Inbox.</p><button class="btn" id="confirm-inbox-test">I Received This Test Email</button>' : "<p>Reconnect Gmail if delivery failed. If a response was interrupted, check Gmail Sent before sending another test.</p>"}`;
+      $("#confirm-inbox-test")?.addEventListener("click", async (event) => {
+        event.target.disabled = true;
+        try {
+          showTest(
+            await api("/api/gmail/test-confirm", {
+              method: "POST",
+              headers: { "X-CSRF-Token": window.__session.csrf },
+              body: JSON.stringify({ id: record.id, received: true }),
+            }),
+          );
+        } catch (error) {
+          el.textContent = error.message;
+        }
+      });
+    };
+    api("/api/gmail/test")
+      .then(showTest)
+      .catch((error) => {
+        if ($("#inbox-test-status"))
+          $("#inbox-test-status").textContent = error.message;
+      });
+    $("#send-inbox-test")?.addEventListener("click", async (event) => {
+      event.target.disabled = true;
+      try {
+        showTest(
+          await api("/api/gmail/test", {
+            method: "POST",
+            headers: { "X-CSRF-Token": window.__session.csrf },
+            body: "{}",
+          }),
+        );
+      } catch (error) {
+        $("#inbox-test-status").textContent = error.message;
+      } finally {
+        event.target.disabled = false;
+      }
+    });
+  }
   $("#gmail-connect")?.addEventListener("click", async () => {
     try {
       await saveChain;

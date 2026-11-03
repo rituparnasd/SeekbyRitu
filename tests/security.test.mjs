@@ -101,6 +101,28 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     const runtime = await request("/api/verification", coach);
     assert.equal(runtime.status, 200);
     assert.match(runtime.data.checks.Storage, /Verified/);
+    assert.equal(runtime.data.packages.length, 3);
+    assert(runtime.data.packages.every((p) => p.approved === false));
+    assert.match(
+      runtime.data.checks.ProgrammeTerms,
+      /Self-Guided.*Guided Coaching.*Premium/,
+    );
+    assert.equal((await request("/api/gmail/test", coach)).data, null);
+    assert.equal(
+      (await request("/api/gmail/test", { ...coach, method: "POST", body: {} }))
+        .status,
+      409,
+    );
+    assert.equal(
+      (
+        await request("/api/gmail/test-confirm", {
+          ...coach,
+          method: "POST",
+          body: { received: true, id: "not-a-test" },
+        })
+      ).status,
+      409,
+    );
     assert.match(runtime.data.times, /Calgary Time/);
     assert.match(runtime.data.times, /India Time/);
     const connect = await request("/api/gmail/connect", {
@@ -310,6 +332,27 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       false,
     );
     assert.equal((await request("/api/gmail/status", client)).status, 403);
+    assert.equal((await request("/api/gmail/test", client)).status, 403);
+    assert.equal(
+      (
+        await request("/api/gmail/test", {
+          ...client,
+          method: "POST",
+          body: {},
+        })
+      ).status,
+      403,
+    );
+    assert.equal(
+      (
+        await request("/api/gmail/test-confirm", {
+          ...client,
+          method: "POST",
+          body: { received: true, id: "x" },
+        })
+      ).status,
+      403,
+    );
     assert.equal((await request("/api/verification", client)).status, 403);
     assert.equal((await request("/api/billing", client)).status, 403);
     assert.equal(

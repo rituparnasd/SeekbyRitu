@@ -4,32 +4,38 @@ The CRM remains private per client. Sharing its URL does not expose the coach wo
 
 ## Existing Render service
 
-1. Open Render → `seek-by-ritu-demo` → Manual Deploy → Deploy latest commit (if automatic deploy has not already started).
-2. Wait for the deployment to say Live, open the service URL and confirm that it shows the sign-in page. A locked setup page is not ready for client access.
-3. Sign in as coach → Admin → Run Live Check. Check storage, build reference, package terms and email connection. This diagnostic sends no messages and does not verify actual inbox delivery.
+1. Confirm the latest GitHub commit is Live in Render. Use Manual Deploy → Deploy latest commit if automatic deploy is disabled.
+2. Open the service URL. A locked setup page is not ready for client access. Preserve existing credentials, encryption key and owner account; do not reset the database for deployment.
+3. Sign in as coach → Admin → Run Live Check. This checks that running deployment's storage, all three package agreements, email setup, recorded test-email receipt, payment-link configuration, app origin, timezone display and build reference.
 
-The service health endpoint now returns HTTP 503 if storage is missing or disconnected. Existing credentials and the encryption key must be preserved; do not reset the owner or database for deployment.
+The health endpoint returns HTTP 503 if storage is missing or disconnected. A successful health check alone does not verify client journeys or inbox delivery.
 
-## Branded URL
+## Service Agreements
 
-The existing hostname does not lose `demo` automatically. To use `crm.seekbyritu.com`, add that hostname in Render → Settings → Custom Domains and configure the `crm` CNAME in GoDaddy using the exact DNS target Render supplies. Leave the main `seekbyritu.com` website records unchanged.
+Products & Services → Edit Defaults for each package → complete and review its Service Agreement → Save Defaults with approval checked. Draft markers such as “must be agreed before signing” block approval and issuing. There is no automatic approval of unresolved financial or privacy terms.
 
-After domain verification, update `APP_ORIGIN` to `https://crm.seekbyritu.com`. Add that origin and `https://crm.seekbyritu.com/api/gmail/callback` in the Google OAuth web client configuration. Deploy again and verify sign-in, Gmail connection and a real test email before switching the website's CRM link.
+See [Final business review](LAUNCH-DECISIONS.md) for the remaining business decisions and proposed wording. The confirmed Premium threshold is 95%, with eligible deposit return within five business days. Existing issued documents retain their snapshots; issue a revision rather than silently altering a signed document.
 
-## Payments and enrolment emails
+## Email delivery test
 
-Stripe is the selected payment method, but no actual payment links have been supplied yet. Required amounts are CAD 50 (Self-Guided), CAD 100 (Guided), CAD 150 (Premium deposit) and CAD 350 (Premium balance). Add the correct links to the corresponding reviewed invoice/payment instructions; do not substitute the Gmail sender address for a payment destination.
+Admin → Test Email Delivery → Send Test Email To My Gmail. This sends only to seekbyritu@gmail.com, with a unique reference and no client information or payment demand. It can be tested before final client terms are approved.
 
-Final reviewed package terms and payment instructions are still required before sending enrolment emails. Existing Gmail configuration is not proof of actual inbox delivery. No live email or payment has been sent from this workspace.
+Check Inbox and Spam for that exact reference, then click I Received This Test Email. The CRM records provider acceptance separately from the coach's inbox confirmation. An interrupted response is Unknown, not Sent; check Gmail Sent before another attempt. Client emails still require reviewed business terms. No live message was sent by the coding workspace.
 
-## Verification status
+## Payments
 
-The signature-free release passed 33 local tests. This workspace has neither a bound Render API key/deploy hook nor network access to the Render host. Public `/health` verification was denied by the outbound proxy before reaching Render. GitHub publication is verified separately from production deployment; do not interpret the local test result as a verified live deployment.
+The four owner-provided checkout links are configured in `public/payment-links.js`: Self-Guided CAD 50, Guided Coaching CAD 100, Premium deposit CAD 150 and Premium balance CAD 350. Programme payment-request emails and new invoices use the matching link. Billing drafts select links only for a single matching CAD package instalment. A changed price, quantity, discount or tax requires matching payment instructions. There is no CAD 500 checkout link, so the CAD 150 link is never used for a CAD 500 invoice.
 
-### Stripe Payment Links (3 November 2026)
+Open each Stripe checkout page and verify its product, CAD currency and amount before sharing it. Confirm payments in Stripe before recording the matching client payment in the CRM. Payment Links do not install webhooks or automatically verify payments. No real charge was made during testing.
 
-The four owner-provided public checkout links are configured in `public/payment-links.js`: Self-Guided CAD 50, Guided Coaching CAD 100, Premium deposit CAD 150, and Premium balance CAD 350. Programme payment-request emails and new invoice PDFs use the matching link. Billing drafts select a link only for a single matching CAD package instalment; changing the price, discount, quantity or tax requires matching payment instructions. Existing issued documents remain unchanged.
+## Optional branded URL
 
-These links do not verify payments automatically. Verify the payment in Stripe before confirming the corresponding payment in the client record. No Stripe webhook is configured by this change. Checkout amounts and actual inbox delivery still require live verification. Final programme terms must be completed and approved before enrolment emails can be sent.
+The Render hostname does not lose `demo` automatically. The existing protected Render URL can be used while a branded address is being configured.
 
-Validation: syntax checks and all 34 tests passed, including exact checkout-link mapping, customised invoice mismatch rejection, package workflows and browser journeys. No actual payment or enrolment email was sent during testing.
+For crm.seekbyritu.com: add it in Render → Settings → Custom Domains, then create the crm CNAME in GoDaddy using Render's exact target. Leave the main website's DNS unchanged. After verification, update APP_ORIGIN to https://crm.seekbyritu.com and add that origin plus https://crm.seekbyritu.com/api/gmail/callback to the Google OAuth web client. Deploy and recheck login, Gmail and inbox delivery before changing the website CRM link.
+
+## Verification evidence
+
+The launch fixes pass 37 local tests, covering authentication/MFA, client isolation, private onboarding, package entitlements, invoices/receipts, payment-link mappings, draft approval, inbox-verification state and responsive coach/client browser journeys. Provider responses in tests are simulated; they do not prove actual Gmail delivery or Stripe checkout configuration.
+
+The owner previously confirmed live encrypted storage on build 02c706c6f971. That result does not verify subsequent deployments. This workspace has no configured Render/GoDaddy credentials and its current outbound policy excludes the Render host. Production deployment and DNS changes cannot be independently performed or verified here. GitHub publication is separate from a live Render deployment.

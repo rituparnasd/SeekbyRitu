@@ -1,3 +1,5 @@
+import { hasUnresolvedTerms } from "./lib/terms-review.mjs";
+import { emailVerification } from "./lib/email-verification.mjs";
 import { readiness } from "./lib/readiness.mjs";
 import { habitStatuses } from "./lib/client-records.mjs";
 import { addTestClient } from "./lib/test-client.mjs";
@@ -116,6 +118,43 @@ async function mailConfigured() {
       )
     : !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
 }
+const inboxVerification = emailVerification({
+  read: async () => {
+    const rows = await db.query(
+      "SELECT value FROM metadata WHERE name='email_verification'",
+    );
+    return rows[0] ? crypt.open(rows[0].value) : null;
+  },
+  write: async (record) => {
+    await db.query(
+      "INSERT INTO metadata(name,value) VALUES('email_verification',?) ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+      [crypt.seal(record)],
+    );
+  },
+  send: async (record) => {
+    let updated;
+    try {
+      updated = await refreshGmail(
+        (await gmailConnection()) || {},
+        googleClient,
+      );
+      await storeGmail(updated);
+    } catch {
+      return { status: "Failed" };
+    }
+    return sendGmail(
+      {
+        from: gmailAddress,
+        to: [gmailAddress],
+        reply_to: gmailAddress,
+        subject: "Seek by Ritu — CRM Email Test",
+        text: `This is your CRM email delivery test. No client was contacted and no payment was requested.\n\nTest reference: ${record.id}\n\nIf this message arrived in your inbox, return to Email Center and confirm receipt of this exact reference.`,
+      },
+      "verification-" + record.id,
+      updated.accessToken,
+    );
+  },
+});
 const timezoneRules = globalThis.coachingTime.createRules();
 const finalTerms = process.env.FINAL_PROGRAMME_TERMS || "";
 async function approvedProgrammeTerms(packageId = "inner-code") {
@@ -126,11 +165,9 @@ async function approvedProgrammeTerms(packageId = "inner-code") {
   const product = rows[0] ? crypt.open(rows[0].payload) : null;
   return product?.approved &&
     product.terms &&
-    !/to be (agreed|provided|confirmed)|suggested.{0,30}approval|must be finalised|terms.{0,20}pending/i.test(
-      product.terms,
-    )
+    !hasUnresolvedTerms(product.terms)
     ? product.terms
-    : packageId === "inner-code"
+    : packageId === "inner-code" && !hasUnresolvedTerms(finalTerms)
       ? finalTerms
       : "";
 }
@@ -1447,8 +1484,18 @@ const server = http.createServer(async (req, res) => {
           )
             storage = "Verified: database responds and encrypted storage works";
         } catch {}
+        const packageReadiness = await Promise.all(
+          globalThis.innerCodePackages.all.map(async (p) => ({
+            id: p.id,
+            name: p.name,
+            approved: !!(await approvedProgrammeTerms(p.id)),
+          })),
+        );
+        const inbox = await inboxVerification.read();
         const now = new Date();
         return json(res, 200, {
+          packages: packageReadiness,
+          emailVerification: inbox,
           checkedAt: now.toISOString(),
           times: globalThis.coachingTime.display({
             date: now.toISOString().slice(0, 10),
@@ -1456,9 +1503,23 @@ const server = http.createServer(async (req, res) => {
           }),
           checks: {
             Storage: storage,
-            ProgrammeTerms: finalTerms
-              ? "Reviewed terms are configured"
-              : "Final terms still need approval",
+            ProgrammeTerms: packageReadiness.every((p) => p.approved)
+              ? "Reviewed terms configured for all three packages"
+              : "Review in Products & Services: " +
+                packageReadiness
+                  .filter((p) => !p.approved)
+                  .map((p) => p.name)
+                  .join(", "),
+            EmailDelivery: inbox?.confirmedAt
+              ? "Coach confirmed test email received on " + inbox.confirmedAt
+              : inbox?.acceptedAt
+                ? "Provider accepted test email; confirm receipt in Email Center"
+                : "Send a test email from Email Center",
+            Payments:
+              "Four Stripe links configured. Verify payments in Stripe before confirming in the CRM.",
+            Domain: origin.includes(".onrender.com")
+              ? "Current Render URL works; branded CRM domain is not configured"
+              : "Configured app origin: " + origin,
             EmailSetup: (await mailConfigured())
               ? "Configured; actual inbox delivery is not yet proved"
               : "Connect your email provider",
@@ -1472,8 +1533,12 @@ const server = http.createServer(async (req, res) => {
         });
       }
       if (path === "/api/terms" && req.method === "GET") {
+        const clientId =
+          a.role === "coach"
+            ? new URL(req.url, origin).searchParams.get("client") || a.id
+            : a.id;
         const packageId = globalThis.innerCodePackages.get(
-          (await stateRead()).programmes[a.id],
+          (await stateRead()).programmes[clientId],
         ).id;
         const terms = await approvedProgrammeTerms(packageId);
         return json(res, 200, {
@@ -1495,6 +1560,25 @@ const server = http.createServer(async (req, res) => {
         });
       if (path.startsWith("/api/gmail/") && a.role !== "coach")
         fail(403, "Coach access required");
+      if (path === "/api/gmail/test" && req.method === "GET")
+        return json(res, 200, await inboxVerification.read());
+      if (path === "/api/gmail/test" && req.method === "POST")
+        return await exclusive(async () => {
+          if (emailProvider !== "gmail" || !(await mailConfigured()))
+            fail(409, "Connect Gmail before sending a test email");
+          const result = await inboxVerification.send();
+          await audit(a.id, "email_test_" + result.status.toLowerCase());
+          return json(res, 200, result);
+        });
+      if (path === "/api/gmail/test-confirm" && req.method === "POST")
+        return await exclusive(async () => {
+          const b = await body(req);
+          if (b.received !== true)
+            fail(400, "Confirm receipt of the matching test message");
+          const result = await inboxVerification.confirm(b.id);
+          await audit(a.id, "email_test_inbox_confirmed");
+          return json(res, 200, result);
+        });
       if (path === "/api/gmail/status" && req.method === "GET")
         return json(res, 200, {
           provider: emailProvider,
