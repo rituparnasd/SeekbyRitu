@@ -52,7 +52,7 @@ test("owner-supplied final package terms pass; newly added unfinished terms stil
     assert(hasUnresolvedTerms(wording));
   assert.equal(
     hasUnresolvedTerms(
-      "The programme costs CAD 50. Accepted changes are confirmed in writing.",
+      "The program costs CAD 50. Accepted changes are confirmed in writing.",
     ),
     false,
   );
@@ -61,7 +61,7 @@ test("owner-supplied final package terms pass; newly added unfinished terms stil
 test("review warnings identify the actual unfinished phrase without blocking completed review language", () => {
   assert.equal(
     hasUnresolvedTerms(
-      "Privacy processing must be explained before enrolment.",
+      "Privacy processing must be explained before enrollment.",
     ),
     false,
   );
@@ -70,7 +70,7 @@ test("review warnings identify the actual unfinished phrase without blocking com
     false,
   );
   assert.equal(
-    hasUnresolvedTerms("The privacy notice must be provided before enrolment."),
+    hasUnresolvedTerms("The privacy notice must be provided before enrollment."),
     false,
   );
   assert.equal(hasUnresolvedTerms("Business address: To be provided"), true);
@@ -80,7 +80,7 @@ test("review warnings identify the actual unfinished phrase without blocking com
   );
   assert.match(
     termsReviewMessage(
-      "Programme details. ".repeat(40) +
+      "Program details. ".repeat(40) +
         "Cancellation must be agreed before signing.",
     ),
     /Cancellation must be agreed before signing/,

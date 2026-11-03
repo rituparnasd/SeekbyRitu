@@ -53,7 +53,7 @@ test("invoice references are unique non-sequential letters with package-specific
   }
   assert.match(documentReference("custom-service"), /^SBR-[A-Z]{6}-[A-Z]{6}$/);
 });
-test("balance verified on Friday schedules the programme by the next business day and retains 20-minute coaching calls", () => {
+test("balance verified on Friday schedules the program by the next business day and retains 20-minute coaching calls", () => {
   const s = {
     leads: [{ id: "a", first: "Client" }],
     programmes: {

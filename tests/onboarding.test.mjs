@@ -22,7 +22,7 @@ test("private onboarding never grants CRM login before full verified payment", a
     DATA_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
     TEST_DB_PATH: join(dir, "db"),
     FINAL_PROGRAMME_TERMS:
-      "1. Program\nA personalised coaching programme.\n\n2. Payments\nCAD 150 deposit and CAD 350 balance.",
+      "1. Program\nA personalized coaching program.\n\n2. Payments\nCAD 150 deposit and CAD 350 balance.",
   };
   delete env.DATABASE_URL;
   const child = spawn(process.execPath, ["server.mjs"], {

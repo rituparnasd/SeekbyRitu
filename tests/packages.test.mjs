@@ -67,7 +67,7 @@ test("India packages activate after full payment and plan preparation, with zero
     assert(s.outbox["a:activation"]);
   }
 });
-test("a paid Self-Guided client does not start tracking before their personalised plan is ready", () => {
+test("a paid Self-Guided client does not start tracking before their personalized plan is ready", () => {
   const s = {
     leads: [{ id: "a" }],
     programmes: {

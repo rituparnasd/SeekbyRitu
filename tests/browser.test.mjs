@@ -137,7 +137,7 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       name: "Invoice Description",
       exact: true,
     });
-    await description.fill("Personalised workshop\nPractical exercises");
+    await description.fill("Personalized workshop\nPractical exercises");
     await page.locator("#product-description").evaluate((field) => {
       const q = documentEditing.get(field);
       q.setSelection(0, q.getLength() - 1);
@@ -240,7 +240,7 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await editor.getByRole("button", { name: "Undo", exact: true }).click();
     assert.equal(
       await page.locator("#product-description").inputValue(),
-      "Personalised workshop\nPractical exercises",
+      "Personalized workshop\nPractical exercises",
     );
     const terms = page.getByRole("textbox", {
       name: "Default Service Agreement",

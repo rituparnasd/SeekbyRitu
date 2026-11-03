@@ -12,7 +12,7 @@ import {
 const destination = new URL("../docs/templates/", import.meta.url);
 await mkdir(destination, { recursive: true });
 function agreement(doc) {
-  pageHeader(doc, { number: 1, label: "DRAFT — TERMS TO FINALISE" });
+  pageHeader(doc, { number: 1, label: "DRAFT — TERMS TO FINALIZE" });
   documentTitle(
     doc,
     "Coaching Agreement",
@@ -21,7 +21,7 @@ function agreement(doc) {
   amountBand(doc, [
     ["Total Payments", "CAD 500"],
     ["Refundable Deposit", "CAD 150"],
-    ["Programme Fee", "CAD 350"],
+    ["Program Fee", "CAD 350"],
   ]);
   clause(
     doc,
@@ -30,18 +30,18 @@ function agreement(doc) {
   );
   clause(
     doc,
-    "02 / Programme",
-    "One onboarding week followed by 30 tracking days across Health, Relationships, Career, Money and Spirituality. Includes a personalised plan, assigned resources, four daily check-ins and ten 20-minute calls on Days 3, 6, 9, 12, 15, 18, 21, 24, 27 and 30. Onboarding includes a separate 30-minute plan walkthrough.",
+    "02 / Program",
+    "One onboarding week followed by 30 tracking days across Health, Relationships, Career, Money and Spirituality. Includes a personalized plan, assigned resources, four daily check-ins and ten 20-minute calls on Days 3, 6, 9, 12, 15, 18, 21, 24, 27 and 30. Onboarding includes a separate 30-minute plan walkthrough.",
   );
   clause(
     doc,
     "03 / Payments & Start",
-    "CAD 150 deposit at enrolment; CAD 350 after the walkthrough. Plan preparation takes three business days after completed onboarding answers are received. Tracking begins the day after balance payment is verified, in the agreed time zone.",
+    "CAD 150 deposit at enrollment; CAD 350 after the walkthrough. Plan preparation takes three business days after completed onboarding answers are received. Tracking begins the day after balance payment is verified, in the agreed time zone.",
   );
   clause(
     doc,
     "04 / Deposit & Completion",
-    "Proposed condition: the CAD 150 deposit is refundable upon achieving 95% completion; below 95% it is not refunded, subject to applicable law. The commitments counted, calculation, adaptations, refund timing, early cancellation and termination treatment must be finalised before signature.",
+    "Proposed condition: the CAD 150 deposit is refundable upon achieving 95% completion; below 95% it is not refunded, subject to applicable law. The commitments counted, calculation, adaptations, refund timing, early cancellation and termination treatment must be finalized before signature.",
   );
   clause(
     doc,
@@ -51,7 +51,7 @@ function agreement(doc) {
   clause(
     doc,
     "06 / Removal & Re-entry",
-    "Warning thresholds, notice, removal conditions and payment effects remain to be agreed in writing. Proposed re-entry requires seven consecutive days of independent agreed tasks with manual reporting and Coach review. Future enrolment after renewed non-adherence is subject to final terms.",
+    "Warning thresholds, notice, removal conditions and payment effects remain to be agreed in writing. Proposed re-entry requires seven consecutive days of independent agreed tasks with manual reporting and Coach review. Future enrollment after renewed non-adherence is subject to final terms.",
   );
   clause(
     doc,
@@ -61,7 +61,7 @@ function agreement(doc) {
   clause(
     doc,
     "08 / Cancellation & Final Approval",
-    "Cancellation, refund and rescheduling terms require completion and review for applicable consumer rights. This working draft is not approved for signature, payment collection or enrolment.",
+    "Cancellation, refund and rescheduling terms require completion and review for applicable consumer rights. This working draft is not approved for signature, payment collection or enrollment.",
   );
   const y = Math.max(doc.y + 13, 716);
   doc
@@ -114,7 +114,7 @@ function deposit(doc) {
   );
   clause(
     doc,
-    "Programme",
+    "Program",
     "One week of onboarding followed by 30 days of tracking and coaching. Total proposed payments: CAD 500.00.",
   );
   clause(
@@ -125,7 +125,7 @@ function deposit(doc) {
   clause(
     doc,
     "Refund Conditions",
-    "95% completion is the proposed deposit-return condition. The calculation method, return timing, adaptations and cancellation treatment must be finalised before sending.",
+    "95% completion is the proposed deposit-return condition. The calculation method, return timing, adaptations and cancellation treatment must be finalized before sending.",
   );
   clause(
     doc,
@@ -143,7 +143,7 @@ function balance(doc) {
   documentTitle(
     doc,
     "Balance Invoice",
-    "Following your plan walkthrough. The next step is programme activation.",
+    "Following your plan walkthrough. The next step is program activation.",
   );
   party(doc);
   amountBand(
@@ -157,8 +157,8 @@ function balance(doc) {
   );
   clause(
     doc,
-    "Programme",
-    "Inner Code: personalised coaching following the completed plan walkthrough. Deposit received on [Date Received].",
+    "Program",
+    "Inner Code: personalized coaching following the completed plan walkthrough. Deposit received on [Date Received].",
   );
   clause(
     doc,
@@ -167,8 +167,8 @@ function balance(doc) {
   );
   clause(
     doc,
-    "Programme Start",
-    "After the balance is verified, tracking starts the following day in the agreed time zone. The personalised plan appears in the activated account; it is not sent as an email attachment.",
+    "Program Start",
+    "After the balance is verified, tracking starts the following day in the agreed time zone. The personalized plan appears in the activated account; it is not sent as an email attachment.",
   );
   clause(
     doc,

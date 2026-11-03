@@ -14,7 +14,7 @@
     if (currency === "CAD" && globalThis.programmeContent?.get(packageId))
       return globalThis.programmeContent.payment(packageId, Number(amount));
     return link
-      ? `Pay CAD ${Number(amount).toFixed(2)} securely via Stripe: ${link}. Use the same email address as your enrolment. Access follows payment verification and programme readiness.`
+      ? `Pay CAD ${Number(amount).toFixed(2)} securely via Stripe: ${link}. Use the same email address as your enrollment. Access follows payment verification and program readiness.`
       : "";
   };
   globalThis.innerCodePayments = Object.freeze({ url, instructions, links });

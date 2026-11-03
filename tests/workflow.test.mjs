@@ -24,7 +24,7 @@ test("server event workflow creates deadlines and idempotent messages without an
   assert.equal(s.outbox["a:welcome"].due, "2026-01-05");
 });
 
-test("three business days skips weekends and does not change programme-day arithmetic", () => {
+test("three business days skips weekends and does not change program-day arithmetic", () => {
   assert.equal(globalThis.addBusinessDays("2026-10-30", 3), "2026-11-04");
   assert.equal(globalThis.addBusinessDays("2026-10-31", 3), "2026-11-04");
   assert.equal(globalThis.addBusinessDays("2026-11-02", 3), "2026-11-05");

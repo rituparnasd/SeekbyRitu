@@ -1,3 +1,4 @@
+import { adoptAmericanEnglish, americanEnglish } from "./lib/american-english.mjs";
 import {
   removeRequestedMistakenInvoice,
   invoiceCleanupStatusKey,
@@ -79,6 +80,7 @@ if (!missing.length) {
     if (production) {
       await removeRequestedDrafts(db, crypt);
       await adoptApprovedPackageTemplates(db, crypt);
+      await adoptAmericanEnglish(db, crypt);
       const mistakenInvoiceCleanup = await removeRequestedMistakenInvoice(
         db,
         crypt,
@@ -187,7 +189,7 @@ const inboxVerification = emailVerification({
   },
 });
 const timezoneRules = globalThis.coachingTime.createRules();
-const finalTerms = process.env.FINAL_PROGRAMME_TERMS || "";
+const finalTerms = americanEnglish(process.env.FINAL_PROGRAMME_TERMS || "");
 async function approvedProgrammeTerms(packageId = "inner-code") {
   const rows = await db.query(
     "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key=?",
@@ -909,11 +911,11 @@ async function prepareEmail(id, actor) {
         : "Configure verified email provider in Render",
     );
   if (finalTerms.length > 20000)
-    fail(409, "Keep programme terms within 20000 characters");
+    fail(409, "Keep program terms within 20000 characters");
   if (!business.name || !business.address || !business.currency || !finalTerms)
     fail(
       409,
-      "Finalise business details and programme terms before real enrollment emails",
+      "Finalize business details and program terms before real enrollment emails",
     );
   if (e.due > day() || ["Paused", "Cancelled"].includes(e.status))
     fail(409, "Message is not due");
@@ -1075,7 +1077,7 @@ async function sendEmail(id, actor) {
       delivery = {
         status: "Failed",
         message:
-          "Gmail authorisation needs attention. Reconnect Gmail in Email Center before retrying.",
+          "Gmail authorization needs attention. Reconnect Gmail in Email Center before retrying.",
       };
     }
   } else {
@@ -1350,7 +1352,7 @@ const server = http.createServer(async (req, res) => {
           signal: AbortSignal.timeout(15000),
         });
         if (!response.ok)
-          fail(502, "Google authorisation could not be completed");
+          fail(502, "Google authorization could not be completed");
         const tokens = await response.json();
         const info = await fetch(
           "https://openidconnect.googleapis.com/v1/userinfo",
@@ -1922,7 +1924,7 @@ const server = http.createServer(async (req, res) => {
               )
                 fail(
                   409,
-                  "A paid programme cannot be switched to another package. Create a separate enrolment.",
+                  "A paid program cannot be switched to another package. Create a separate enrollment.",
                 );
               p.packageId = packageId;
               p.packageSnapshot =
@@ -2187,7 +2189,7 @@ const server = http.createServer(async (req, res) => {
             ).id,
           );
           if (finalTerms.length > 20000)
-            fail(409, "Programme terms exceed the supported limit");
+            fail(409, "Program terms exceed the supported limit");
           if (
             !finalTerms ||
             !business.name ||
@@ -2197,7 +2199,7 @@ const server = http.createServer(async (req, res) => {
             fail(409, "Final approved terms and business details are required");
           const b = await body(req);
           if (a.role !== "client" || !b.name?.trim() || b.accept !== true)
-            fail(400, "Client acknowledgement is required");
+            fail(400, "Client acknowledgment is required");
           const text = finalTerms,
             version = digest(text + JSON.stringify(business));
           await db.query("INSERT INTO signatures(id,payload) VALUES(?,?)", [
@@ -2225,7 +2227,7 @@ const server = http.createServer(async (req, res) => {
           return json(res, 201, {
             version,
             message:
-              "Authenticated acknowledgement saved. This is not third-party identity-verified signing.",
+              "Authenticated acknowledgment saved. This is not third-party identity-verified signing.",
           });
         });
       fail(404, "Endpoint not found");

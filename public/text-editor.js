@@ -249,8 +249,8 @@
           header: "Heading",
           align: "Alignment",
           lineheight: "Line Spacing",
-          color: "Text Colour",
-          background: "Highlight Colour",
+          color: "Text Color",
+          background: "Highlight Color",
         };
         wrapper.querySelectorAll(".ql-picker").forEach((picker) => {
           const type = Object.keys(pickerNames).find((key) =>

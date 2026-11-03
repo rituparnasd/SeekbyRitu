@@ -271,7 +271,7 @@ test("real client browser: habit, practice, check-in and journal persistence; se
     );
     await page.reload();
     await page
-      .getByRole("heading", { name: "Your Programme Is On Hold", exact: true })
+      .getByRole("heading", { name: "Your Program Is On Hold", exact: true })
       .waitFor();
     assert.equal(await page.locator("[data-habit]").count(), 0);
     await coachPage

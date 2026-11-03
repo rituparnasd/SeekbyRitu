@@ -1,4 +1,4 @@
-/* Owner-supplied programme content. One brand system; each offer has its own scope. */
+/* Owner-supplied program content. One brand system; each offer has its own scope. */
 (() => {
   const email = "seekbyritu@gmail.com";
   const scope = [

@@ -211,8 +211,8 @@ function page() {
     !["profile", "reports"].includes(state.view)
   )
     return title(
-      "Your Programme Is Not Active Yet",
-      "Your payment and programme setup are being confirmed. Rituparna will let you know when tracking opens.",
+      "Your Program Is Not Active Yet",
+      "Your payment and program setup are being confirmed. Rituparna will let you know when tracking opens.",
     );
   if (
     state.mode === "client" &&
@@ -221,8 +221,8 @@ function page() {
   )
     return title(
       programme(c().id).status === "On Hold"
-        ? "Your Programme Is On Hold"
-        : "Your Programme Has Ended",
+        ? "Your Program Is On Hold"
+        : "Your Program Has Ended",
       "Daily submissions are paused. Contact Rituparna for the next step.",
     );
   if (
@@ -329,8 +329,8 @@ function today() {
       programme(c().id).start > day)
   )
     return title(
-      "Your Programme Is Not Active Yet",
-      "Complete onboarding and the walkthrough. Your plan appears on your agreed programme start date.",
+      "Your Program Is Not Active Yet",
+      "Complete onboarding and the walkthrough. Your plan appears on your agreed program start date.",
     );
   return (
     title(
@@ -454,7 +454,7 @@ function reports() {
       `<div class="actions">${button("Print / Save PDF", "print", "primary")}${button("Download CSV", "csv")}</div>`,
     ) +
     (state.mode === "coach" ? selector() : "") +
-    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Programme day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>${packageFor().refundThreshold ? packageFor().refundThreshold + "%" : "—"}</strong><span>${packageFor().deposit ? "Premium deposit eligibility; no automatic refund" : "No accountability deposit in this package"}</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${groupedHabits("summary")}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
+    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Program day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>${packageFor().refundThreshold ? packageFor().refundThreshold + "%" : "—"}</strong><span>${packageFor().deposit ? "Premium deposit eligibility; no automatic refund" : "No accountability deposit in this package"}</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${groupedHabits("summary")}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
   );
 }
 function profile() {
@@ -472,7 +472,7 @@ function profile() {
 function notes() {
   return (
     title(
-      "A private space for your judgement.",
+      "A private space for your judgment.",
       "Private notes are restricted to the coach by the server.",
     ) +
     selector() +
@@ -878,10 +878,10 @@ function calendarPage() {
       "Calendar",
       "Every event shows Calgary Time and India Time. Calendar dates follow Calgary.",
     ) +
-    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${esc(coachingTime.display(x))} · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Programme Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this date range. Calls appear after a programme is activated.</div>'}</div><details class="card"><summary>Manage A Client’s Schedule</summary><h2>Programme Controls</h2><p class="small muted">Complete the client’s enrolment steps before activation. Enter the agreed recurring Calgary time; overlapping calls are rejected. Saving updates future calls, while existing bookings otherwise keep their scheduled moments. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
+    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${esc(coachingTime.display(x))} · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Program Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this date range. Calls appear after a program is activated.</div>'}</div><details class="card"><summary>Manage A Client’s Schedule</summary><h2>Program Controls</h2><p class="small muted">Complete the client’s enrollment steps before activation. Enter the agreed recurring Calgary time; overlapping calls are rejected. Saving updates future calls, while existing bookings otherwise keep their scheduled moments. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
       .map((x) => {
         const p = programme(x.id);
-        return `<form class="programme-form list-item" data-id="${x.id}"><div class="row"><h3>${esc(x.name)}</h3><span class="badge">${esc(p.status)}</span></div><div class="form-grid"><div class="field"><label>Agreed Programme Start</label><input name="start" type="date" value="${p.start}" required></div><div class="field">${packageFor(x.id).calls ? `<label>Agreed Call Time (Calgary)</label><input name="time" type="time" value="${calgaryProgrammeTime(p)}" required>` : `<span class="muted">Self-Guided · No private calls</span><input name="time" type="hidden" value="10:00">`}</div></div><div class="actions"><button class="btn primary">${p.status === "Not Activated" ? "Activate Programme" : "Update Future Schedule"}</button>${p.status === "Active" ? `<button class="btn" type="button" data-hold="${x.id}">Put On Hold</button>` : ""}${p.status === "On Hold" ? `<button class="btn" type="button" data-resume="${x.id}">Resume Programme</button>` : ""}${["Active", "On Hold"].includes(p.status) ? `<button class="btn" type="button" data-end="${x.id}">End Programme</button>` : ""}</div></form>`;
+        return `<form class="programme-form list-item" data-id="${x.id}"><div class="row"><h3>${esc(x.name)}</h3><span class="badge">${esc(p.status)}</span></div><div class="form-grid"><div class="field"><label>Agreed Program Start</label><input name="start" type="date" value="${p.start}" required></div><div class="field">${packageFor(x.id).calls ? `<label>Agreed Call Time (Calgary)</label><input name="time" type="time" value="${calgaryProgrammeTime(p)}" required>` : `<span class="muted">Self-Guided · No private calls</span><input name="time" type="hidden" value="10:00">`}</div></div><div class="actions"><button class="btn primary">${p.status === "Not Activated" ? "Activate Program" : "Update Future Schedule"}</button>${p.status === "Active" ? `<button class="btn" type="button" data-hold="${x.id}">Put On Hold</button>` : ""}${p.status === "On Hold" ? `<button class="btn" type="button" data-resume="${x.id}">Resume Program</button>` : ""}${["Active", "On Hold"].includes(p.status) ? `<button class="btn" type="button" data-end="${x.id}">End Program</button>` : ""}</div></form>`;
       })
       .join("")}</details>`
   );
@@ -927,7 +927,7 @@ function practicesPage() {
             `<div class="list-item"><div class="row"><h3>${esc(p.name)}</h3>${coach ? `<button class="btn subtle" data-delete-practice="${i}">Unassign From This Client</button>` : ""}</div><p>${esc(p.instructions)}</p><div class="practice-windows">${p.windows.map((w) => (coach ? `<span class="badge">${w}</span>` : `<label><input type="checkbox" data-practice="${esc(p.id)}" data-window="${w}" ${state.practiceTicks[tickKey]?.[p.id + ":" + w] ? "checked" : ""}> ${w}</label>`)).join("")}</div></div>`,
         )
         .join("") || "<p>No practices assigned.</p>"
-    }</div>${coach ? `<form id="practice-form" class="card"><h2>Add A Daily Practice</h2><div class="field"><label>Practice Name</label><input name="name" required maxlength="200"></div><div class="field"><label>Personalised Instructions</label><textarea name="instructions" required maxlength="5000"></textarea></div><div class="practice-windows">${windows.map((w) => `<label><input type="checkbox" name="windows" value="${w}" checked> ${w}</label>`).join("")}</div><p class="small muted">Choose practices together with the client. These are separate from their pillar habits.</p><button class="btn primary">Assign To ${esc(c().name)}</button></form>` : ""}`
+    }</div>${coach ? `<form id="practice-form" class="card"><h2>Add A Daily Practice</h2><div class="field"><label>Practice Name</label><input name="name" required maxlength="200"></div><div class="field"><label>Personalized Instructions</label><textarea name="instructions" required maxlength="5000"></textarea></div><div class="practice-windows">${windows.map((w) => `<label><input type="checkbox" name="windows" value="${w}" checked> ${w}</label>`).join("")}</div><p class="small muted">Choose practices together with the client. These are separate from their pillar habits.</p><button class="btn primary">Assign To ${esc(c().name)}</button></form>` : ""}`
   );
 }
 function materials() {
@@ -962,7 +962,7 @@ function resources() {
       })
       .join(
         "",
-      )}</div><div id="material-editor"></div><div class="note">Server access rules protect unreleased material. Assign authorised resources and completion requirements before release.</div>`
+      )}</div><div id="material-editor"></div><div class="note">Server access rules protect unreleased material. Assign authorized resources and completion requirements before release.</div>`
   );
 }
 function onboardingPage() {
@@ -1124,7 +1124,7 @@ function bindWorkflow() {
           p = programme(id),
           f = new FormData(form);
         if (["On Hold", "Ended"].includes(p.status)) {
-          toast("Resume the programme before adjusting its schedule.");
+          toast("Resume the program before adjusting its schedule.");
           return;
         }
         if (
@@ -1139,7 +1139,7 @@ function bindWorkflow() {
         }
         if (p.status === "Active" && p.start !== f.get("start")) {
           toast(
-            "An active programme start is preserved. Use hold/resume to shift remaining days.",
+            "An active program start is preserved. Use hold/resume to shift remaining days.",
           );
           return;
         }
@@ -1200,7 +1200,7 @@ function bindWorkflow() {
         }
         save();
         render();
-        toast("Programme active. The package call schedule is ready.");
+        toast("Program active. The package call schedule is ready.");
       }),
   );
   document.querySelectorAll("[data-hold]").forEach(
@@ -1259,7 +1259,7 @@ function bindWorkflow() {
         }
         save();
         render();
-        toast("Programme resumed; remaining calls restored.");
+        toast("Program resumed; remaining calls restored.");
       }),
   );
   document.querySelectorAll("[data-end]").forEach(
@@ -1271,7 +1271,7 @@ function bindWorkflow() {
         state.programmes[b.dataset.end] = p;
         save();
         render();
-        toast("Programme ended. Future calls removed.");
+        toast("Program ended. Future calls removed.");
       }),
   );
   $("#practice-form")?.addEventListener("submit", (e) => {
@@ -1460,7 +1460,7 @@ function taskList() {
     if (!w.planReady) {
       add(
         "plan",
-        "Prepare Personalised Plan",
+        "Prepare Personalized Plan",
         w.planDue || addBusinessDays(intake.submitted.slice(0, 10), 3),
         "habits",
       );
@@ -1468,7 +1468,7 @@ function taskList() {
     }
     if (!cfg.walkthrough) {
       if (p.status !== "Active")
-        add("activation", "Check Programme Activation", day, "calendar");
+        add("activation", "Check Program Activation", day, "calendar");
       continue;
     }
     if (!w.slots?.length) {
@@ -1499,7 +1499,7 @@ function taskList() {
     if (p.status === "Not Activated")
       add(
         "activation",
-        "Review Start & Activate Programme",
+        "Review Start & Activate Program",
         dateAdd(w.balanceDate || day, 1),
         "calendar",
       );
@@ -1591,7 +1591,7 @@ function calendarEvents() {
             ]
           : []),
         ...(w.workBlock && !w.planReady
-          ? [{ ...w.workBlock, id: x.id, label: "Prepare Personalised Plan" }]
+          ? [{ ...w.workBlock, id: x.id, label: "Prepare Personalized Plan" }]
           : []),
         ...(w.booking
           ? [
@@ -1642,7 +1642,7 @@ function bindTasks() {
     }
     const { date, time } = event;
     if (
-      !slotAvailable(c().id, date, time, duration, "Prepare Personalised Plan")
+      !slotAvailable(c().id, date, time, duration, "Prepare Personalized Plan")
     ) {
       toast("That work block overlaps another event. Choose another slot.");
       return;
@@ -1756,11 +1756,11 @@ function emailsPage() {
       "Email Center",
       "Review templates and event-generated messages. Delivery uses the configured verified sender.",
     ) +
-    `<div class="card"><h2>Gmail Connection</h2><p>Sender and replies: <strong>seekbyritu@gmail.com</strong></p><p>Connect through Google authorisation. No Gmail password is stored.</p><div class="actions"><button class="btn primary" id="gmail-connect">Connect / Reconnect Gmail</button><button class="btn" id="gmail-disconnect">Disconnect Gmail</button></div><div id="gmail-status"></div></div><div class="card"><h2>Test Inbox Delivery</h2><p>Send one test to seekbyritu@gmail.com. Then check Inbox or Spam and confirm the matching reference below. No client is contacted.</p><button class="btn" id="send-inbox-test">Send Test Email To My Gmail</button><div id="inbox-test-status" aria-live="polite"></div></div><div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrolment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
+    `<div class="card"><h2>Gmail Connection</h2><p>Sender and replies: <strong>seekbyritu@gmail.com</strong></p><p>Connect through Google authorization. No Gmail password is stored.</p><div class="actions"><button class="btn primary" id="gmail-connect">Connect / Reconnect Gmail</button><button class="btn" id="gmail-disconnect">Disconnect Gmail</button></div><div id="gmail-status"></div></div><div class="card"><h2>Test Inbox Delivery</h2><p>Send one test to seekbyritu@gmail.com. Then check Inbox or Spam and confirm the matching reference below. No client is contacted.</p><button class="btn" id="send-inbox-test">Send Test Email To My Gmail</button><div id="inbox-test-status" aria-live="polite"></div></div><div class="note">${window.__config.emailConfigured ? "Email provider configured." : "Email delivery is not configured."} ${window.__config.businessConfigured ? "Business terms configured." : "Final business details and terms are required before sending enrollment emails."} No message is marked Sent without an accepted provider response.</div><div class="card">${
       Object.values(state.outbox || {})
         .map(
           (e) =>
-            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status)} · ${e.due}</span></div><p class="small muted">${esc(e.recipient || clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p>${e.lastError ? `<div class="note">${esc(e.lastError)}</div>` : ""}<div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused", "Unknown"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button>${e.status === "Unknown" ? `<div class="note">Check Gmail Sent first. The response was interrupted, so retrying without checking could send a duplicate.<div class="actions"><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Sent">I Verified It Was Sent</button><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Draft">Not Sent — Allow Retry</button></div></div>` : ""}</div></div>`,
+            `<div class="list-item"><div class="row"><h3>${esc(e.subject)}</h3><span class="badge">${esc(e.status === "Cancelled" ? "Canceled" : e.status)} · ${e.due}</span></div><p class="small muted">${esc(e.recipient || clients.find((c) => c.id === e.client)?.name)} · ${esc(e.id)}</p><p>${esc(e.body)}</p>${e.lastError ? `<div class="note">${esc(e.lastError)}</div>` : ""}<div class="actions"><button class="btn subtle" data-email-reviewed="${esc(e.id)}">Mark Reviewed</button><button class="btn primary" data-send-email="${esc(e.id)}" ${e.due > day || ["Sent", "Cancelled", "Paused", "Unknown"].includes(e.status) ? "disabled" : ""}>${e.status === "Failed" ? "Retry Delivery" : "Send Email"}</button>${e.status === "Unknown" ? `<div class="note">Check Gmail Sent first. The response was interrupted, so retrying without checking could send a duplicate.<div class="actions"><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Sent">I Verified It Was Sent</button><button class="btn subtle" data-resolve-mail="${esc(e.id)}" data-resolution="Draft">Not Sent — Allow Retry</button></div></div>` : ""}</div></div>`,
         )
         .join("") ||
       "<p>No emails queued. Register your first lead to begin.</p>"
@@ -1787,10 +1787,10 @@ function agreement() {
   return (
     title(
       "Service Agreement",
-      "Review the exact final terms before accepting or paying. Draft terms are not approved for enrolment.",
+      "Review the exact final terms before accepting or paying. Draft terms are not approved for enrollment.",
     ) +
     (state.mode === "coach" ? selector() : "") +
-    `<div class="card"><p><a href="/privacy" target="_blank" rel="noopener">Read Privacy Policy</a></p><h2>${esc(cfg.name)} · 30-Day Programme</h2><p>Total: CAD ${cfg.price}. ${cfg.deposit ? "CAD 150 deposit, then CAD 350 after the walkthrough. Eligible deposit return requires 95% completion and the agreed call attendance conditions; return within five business days." : "Full payment before account access. No refundable accountability deposit."} ${cfg.calls ? `${cfg.calls} private 20-minute calls.` : "No private coaching calls."}</p><a class="btn" href="/api/pdf/agreement?client=${encodeURIComponent(c().id)}">Download Agreement PDF</a><div class="note">${detail.loading ? "Checking this package’s Service Agreement…" : detail.error ? esc(detail.error) : detail.approved ? "Approved terms for this package are ready. Download and review them." : "This package’s terms still need review in Products & Services. Acceptance and enrolment are blocked."}</div>${state.mode !== "coach" && detail.approved ? '<form id="final-agreement-form"><label>Your Full Name</label><input name="name" required maxlength="150"><label><input type="checkbox" name="accept" required> I have reviewed and agree to the final document.</label><button class="btn primary">Record Account-Authenticated Acknowledgement</button></form>' : ""}<p class="small muted">This records the authenticated account, exact terms version and server timestamp. It is not third-party identity verification or a guarantee of legal enforceability.</p></div>`
+    `<div class="card"><p><a href="/privacy" target="_blank" rel="noopener">Read Privacy Policy</a></p><h2>${esc(cfg.name)} · 30-Day Program</h2><p>Total: CAD ${cfg.price}. ${cfg.deposit ? "CAD 150 deposit, then CAD 350 after the walkthrough. Eligible deposit return requires 95% completion and the agreed call attendance conditions; return within five business days." : "Full payment before account access. No refundable accountability deposit."} ${cfg.calls ? `${cfg.calls} private 20-minute calls.` : "No private coaching calls."}</p><a class="btn" href="/api/pdf/agreement?client=${encodeURIComponent(c().id)}">Download Agreement PDF</a><div class="note">${detail.loading ? "Checking this package’s Service Agreement…" : detail.error ? esc(detail.error) : detail.approved ? "Approved terms for this package are ready. Download and review them." : "This package’s terms still need review in Products & Services. Acceptance and enrollment are blocked."}</div>${state.mode !== "coach" && detail.approved ? '<form id="final-agreement-form"><label>Your Full Name</label><input name="name" required maxlength="150"><label><input type="checkbox" name="accept" required> I have reviewed and agree to the final document.</label><button class="btn primary">Record Account-Authenticated Acknowledgment</button></form>' : ""}<p class="small muted">This records the authenticated account, exact terms version and server timestamp. It is not third-party identity verification or a guarantee of legal enforceability.</p></div>`
   );
 }
 function bindServerActions() {
@@ -2046,7 +2046,7 @@ function documentsPage() {
       "Documents",
       "Branded drafts for review. Client-specific documents are generated from Leads & Enrollment.",
     ) +
-    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. Plan preparation takes 3–5 business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
+    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalized. Plan preparation takes 3–5 business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
   );
 }
 if (

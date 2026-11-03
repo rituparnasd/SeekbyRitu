@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { habitStatuses } from "../lib/client-records.mjs";
 import { reportData } from "../lib/reports.mjs";
-test("only assigned habit slots and recognised statuses count as records", () => {
+test("only assigned habit slots and recognized statuses count as records", () => {
   assert.deepEqual(habitStatuses({ 0: "done", 1: "rest" }, 2), {
     0: "done",
     1: "rest",
