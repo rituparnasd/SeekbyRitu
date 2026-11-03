@@ -1255,3 +1255,57 @@ details.card[open] > summary {
   margin: 8px 0 16px;
   overflow-wrap: anywhere;
 }
+
+.document-text-editor {
+  border: 1px solid var(--line, #dce3dd);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.document-edit-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 7px;
+  border-bottom: 1px solid #dce3dd;
+  background: #f7f9f8;
+}
+.document-edit-toolbar button {
+  font: inherit;
+  font-size: 12px;
+  color: #071a2b;
+  background: #fff;
+  border: 1px solid #dce3dd;
+  border-radius: 5px;
+  padding: 7px 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+.document-edit-toolbar button:hover {
+  background: #edf3ef;
+}
+.document-edit-toolbar button:focus-visible {
+  outline: 2px solid #0b3027;
+  outline-offset: 1px;
+}
+.document-text-editor textarea {
+  display: block;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  width: 100%;
+  min-height: 155px;
+  line-height: 1.7;
+  tab-size: 2;
+  resize: vertical;
+}
+.document-text-editor textarea.agreement-editor {
+  min-height: 340px;
+}
+.editor-help {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #687772;
+}

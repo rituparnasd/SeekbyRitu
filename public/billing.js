@@ -165,6 +165,7 @@ async function billingMutation(path, data) {
   ).result;
 }
 function bindBilling() {
+  documentEditing.mount();
   if (
     !["catalogue", "billing"].includes(state.view) ||
     window.__session.role !== "coach"
@@ -221,7 +222,7 @@ function bindBilling() {
   on("#product-form", "submit", async (e) => {
     e.preventDefault();
     const f = e.target,
-      b = f.querySelector("button");
+      b = f.querySelector('button:not([type="button"])');
     b.disabled = true;
     try {
       await billingMutation("product", {
@@ -415,7 +416,7 @@ function bindBilling() {
   on("#billing-receipt-form", "submit", async (e) => {
     e.preventDefault();
     const form = e.target,
-      button = form.querySelector("button");
+      button = form.querySelector('button:not([type="button"])');
     button.disabled = true;
     try {
       const v = Object.fromEntries(new FormData(form));

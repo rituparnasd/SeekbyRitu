@@ -1985,6 +1985,7 @@ const server = http.createServer(async (req, res) => {
       "/style.css": "style.css",
       "/app.js": "app.js",
       "/billing.js": "billing.js",
+      "/text-editor.js": "text-editor.js",
       "/workspace.js": "workspace.js",
       "/intake.js": "intake.js",
       "/assets/fonts/OpenSans-Semibold.ttf":

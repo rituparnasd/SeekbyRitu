@@ -127,7 +127,52 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await page.locator("#product-name").fill("Fixture Workshop");
     await page.locator("#product-price").fill("19.99");
     await page.locator("#product-tax").fill("5");
-    await page.locator("#product-description").fill("A personalised workshop.");
+    await page
+      .locator("#product-description")
+      .fill("Personalised workshop\nPractical exercises");
+    await page.locator("#product-description").evaluate((field) => {
+      field.focus();
+      field.setSelectionRange(0, field.value.length);
+    });
+    const editor = page
+      .locator(".document-text-editor")
+      .filter({ has: page.locator("#product-description") });
+    await editor
+      .getByRole("button", {
+        name: "Toggle bullet points on selected lines",
+        exact: true,
+      })
+      .click();
+    assert.equal(
+      await page.locator("#product-description").inputValue(),
+      "• Personalised workshop\n• Practical exercises",
+    );
+    await editor
+      .getByRole("button", { name: "Indent selected lines (Tab)", exact: true })
+      .click();
+    assert.match(
+      await page.locator("#product-description").inputValue(),
+      /^  • /,
+    );
+    await editor
+      .getByRole("button", { name: "Undo (Ctrl/Cmd+Z)", exact: true })
+      .click();
+    assert.equal(
+      await page.locator("#product-description").inputValue(),
+      "• Personalised workshop\n• Practical exercises",
+    );
+    await page.locator("#product-description").press("Control+End");
+    await page.locator("#product-description").press("Enter");
+    assert(
+      (await page.locator("#product-description").inputValue()).endsWith(
+        "\n• ",
+      ),
+    );
+    await page.locator("#product-description").press("Enter");
+    assert(
+      (await page.locator("#product-description").inputValue()).endsWith("\n"),
+    );
+    assert.equal(await page.locator("#product-form").count(), 1);
     await page
       .locator("#product-terms")
       .fill(
