@@ -1,3 +1,15 @@
+import {
+  removeRequestedMistakenInvoice,
+  invoiceCleanupStatusKey,
+} from "./lib/billing-deletion.mjs";
+import {
+  privacyInfo,
+  privacyText,
+  privacyHTML,
+  privacyPDF,
+  coachingConsent,
+  privacyConsentText,
+} from "./lib/privacy.mjs";
 import { adoptApprovedPackageTemplates } from "./lib/approved-package-templates.mjs";
 import { documentReference } from "./lib/document-references.mjs";
 import {
@@ -67,6 +79,15 @@ if (!missing.length) {
     if (production) {
       await removeRequestedDrafts(db, crypt);
       await adoptApprovedPackageTemplates(db, crypt);
+      const mistakenInvoiceCleanup = await removeRequestedMistakenInvoice(
+        db,
+        crypt,
+      );
+      if (mistakenInvoiceCleanup.reason)
+        console.error(
+          "Requested invoice cleanup requires review: " +
+            mistakenInvoiceCleanup.reason,
+        );
     }
   } catch (error) {
     initError = true;
@@ -839,6 +860,13 @@ async function prepareEmail(id, actor) {
         filename: `${record.reference}-${kind}.pdf`,
         content: (await billingPDF(record, kind)).toString("base64"),
       });
+    if (record.status !== "Receipt") {
+      mail.text += `\n\nPrivacy Policy: ${origin}/privacy`;
+      mail.attachments.push({
+        filename: "privacy-policy.pdf",
+        content: (await privacyPDF()).toString("base64"),
+      });
+    }
     await db.query(
       "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
       [id, crypt.seal({ status: "Pending", mail })],
@@ -922,7 +950,7 @@ async function prepareEmail(id, actor) {
     to: [lead.email],
     reply_to: process.env.EMAIL_REPLY_TO || "seekbyritu@gmail.com",
     subject: e.subject,
-    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Private link: " + link + "\n\n" : ""}Rituparna Das\nSeek by Ritu\nseekbyritu@gmail.com${business.publicAddress ? "\n" + business.publicAddress : ""}`,
+    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Private link: " + link + "\n\n" : ""}Rituparna Das\nSeek by Ritu\nseekbyritu@gmail.com\nPrivacy Policy: ${origin}/privacy${business.publicAddress ? "\n" + business.publicAddress : ""}`,
   };
   if (["slots", "slot-reminder"].includes(e.type))
     mail.text +=
@@ -973,6 +1001,11 @@ async function prepareEmail(id, actor) {
           await financialRecord(state, e.client, "invoice", stage),
         )
       ).toString("base64"),
+    });
+  if (e.type === "first")
+    attachments.push({
+      filename: "privacy-policy.pdf",
+      content: (await privacyPDF()).toString("base64"),
     });
   if (attachments.length) mail.attachments = attachments;
   await db.query(
@@ -1105,6 +1138,20 @@ const server = http.createServer(async (req, res) => {
     }
     if (path === "/api/timezones" && req.method === "GET")
       return json(res, 200, { rules: timezoneRules });
+    if (path === "/privacy" || path === "/privacy-policy") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end(privacyHTML());
+    }
+    if (path === "/privacy.pdf") {
+      res.writeHead(200, {
+        "Content-Type": "application/pdf",
+        "Content-Disposition":
+          'inline; filename="Seek-by-Ritu-Privacy-Policy.pdf"',
+      });
+      return res.end(await privacyPDF());
+    }
+    if (path === "/api/privacy")
+      return json(res, 200, { ...privacyInfo, text: privacyText });
     const finalTerms = db ? await approvedProgrammeTerms() : "";
     if (path === "/api/config") {
       const owner = db
@@ -1112,6 +1159,7 @@ const server = http.createServer(async (req, res) => {
         : false;
       return json(res, 200, {
         ready: !!db,
+        privacy: privacyInfo,
         setupRequired: !owner,
         missing,
         storageError: initError,
@@ -1340,6 +1388,12 @@ const server = http.createServer(async (req, res) => {
               package: cfg,
               intake: s.intakes[lead.id] || null,
               questions: globalThis.seekIntakeQuestions,
+              privacy: privacyInfo,
+              coachingConsentStatement: privacyConsentText,
+              coachingConsent:
+                !!s.intakes[lead.id]?.consent?.coachingInformation &&
+                s.intakes[lead.id]?.consent?.policyVersion ===
+                  privacyInfo.version,
             });
           const b = await body(req);
           if (b.action === "agree") {
@@ -1361,6 +1415,8 @@ const server = http.createServer(async (req, res) => {
                 name: String(b.name).slice(0, 200),
                 version,
                 text: finalTerms,
+                privacyVersion: privacyInfo.version,
+                privacyPolicy: privacyText,
                 at,
                 type: "private_link_acknowledgement",
               }),
@@ -1381,6 +1437,10 @@ const server = http.createServer(async (req, res) => {
                 409,
                 "Your answers have already been submitted and are preserved.",
               );
+            const consent =
+              s.intakes[lead.id]?.consent?.policyVersion === privacyInfo.version
+                ? s.intakes[lead.id].consent
+                : coachingConsent(b);
             if (
               !Array.isArray(b.answers) ||
               b.answers.length !== 30 ||
@@ -1393,8 +1453,16 @@ const server = http.createServer(async (req, res) => {
                 400,
                 "Complete each questionnaire answer before submitting.",
               );
+            await db.query(
+              "INSERT INTO documents(section,record_key,payload) VALUES('privacy_consents',?,?) ON CONFLICT(section,record_key) DO NOTHING",
+              [
+                lead.id + ":" + consent.policyVersion,
+                crypt.seal({ client: lead.id, ...consent }),
+              ],
+            );
             s.intakes[lead.id] = {
               answers: b.answers,
+              consent,
               ...(b.submit ? { submitted: new Date().toISOString() } : {}),
             };
           } else fail(400, "Unknown onboarding action");
@@ -1425,6 +1493,7 @@ const server = http.createServer(async (req, res) => {
               products: await store.products(),
               documents: await store.documents(),
               payments: await store.payments(),
+              trash: await store.trash(),
             }),
           );
         if (path === "/api/billing/pdf" && req.method === "GET") {
@@ -1453,7 +1522,11 @@ const server = http.createServer(async (req, res) => {
             if (path === "/api/billing/product") {
               result = await store.saveProduct(b);
               await stateWrite(await stateRead());
-            } else if (path === "/api/billing/draft")
+            } else if (path === "/api/billing/delete")
+              result = await store.deleteDocument(b);
+            else if (path === "/api/billing/restore")
+              result = await store.restoreDraft(b);
+            else if (path === "/api/billing/draft")
               result = await store.saveDocument(b, business);
             else if (path === "/api/billing/issue")
               result = await store.issue(b.id, b.version);
@@ -1567,6 +1640,13 @@ const server = http.createServer(async (req, res) => {
         const draftCleanup = cleanupRows[0]
           ? JSON.parse(cleanupRows[0].value)
           : null;
+        const invoiceCleanupRows = await db.query(
+          "SELECT value FROM metadata WHERE name=?",
+          [invoiceCleanupStatusKey],
+        );
+        const invoiceCleanup = invoiceCleanupRows[0]
+          ? JSON.parse(invoiceCleanupRows[0].value)
+          : null;
         const inbox = await inboxVerification.read();
         const now = new Date();
         return json(res, 200, {
@@ -1579,6 +1659,10 @@ const server = http.createServer(async (req, res) => {
           }),
           checks: {
             Storage: storage,
+            InvoiceCleanup: invoiceCleanup
+              ? invoiceCleanup.reason ||
+                "The specified mistaken invoice is no longer in Billing."
+              : "Not run on this environment",
             DraftCleanup: draftCleanup
               ? `${draftCleanup.removed} requested drafts removed; issued documents and new drafts retained`
               : "Not run on this environment",
@@ -2039,6 +2123,8 @@ const server = http.createServer(async (req, res) => {
               version,
               text,
               business,
+              privacyVersion: privacyInfo.version,
+              privacyPolicy: privacyText,
               at: new Date().toISOString(),
               type: "authenticated_acknowledgement",
             }),

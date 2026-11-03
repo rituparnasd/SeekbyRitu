@@ -1451,3 +1451,49 @@ details.card[open] > summary {
 .date-picker-button:focus-visible {
   outline: 2px solid #103f34;
 }
+.privacy-page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+  background: #fff;
+}
+.privacy-heading {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  border-top: 6px solid #103f34;
+  padding-top: 24px;
+}
+.privacy-heading img {
+  width: 52px;
+  height: auto;
+}
+.privacy-page section {
+  margin: 32px 0;
+}
+.privacy-page h2 {
+  font-size: 19px;
+  color: #103f34;
+}
+.privacy-page p {
+  line-height: 1.7;
+}
+.privacy-bullet {
+  padding-left: 18px;
+  position: relative;
+}
+.privacy-bullet::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #103f34;
+}
+.privacy-page footer {
+  border-top: 1px solid #d5e1dc;
+  padding-top: 20px;
+}
+.sidebar footer a {
+  color: inherit;
+  display: inline-block;
+  margin-top: 12px;
+}

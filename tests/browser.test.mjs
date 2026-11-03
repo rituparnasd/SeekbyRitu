@@ -52,6 +52,12 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(origin);
+    await page
+      .getByRole("link", { name: "Privacy Policy", exact: true })
+      .waitFor();
+    const privacyPage = await page.request.get(origin + "/privacy");
+    assert.equal(privacyPage.status(), 200);
+    assert.match(await privacyPage.text(), /10. Policy Updates/);
     await page.locator('[name="email"]').fill("owner@example.test");
     await page.locator('[name="password"]').fill("browser-owner-long-123");
     await page.locator('[name="code"]').fill(totp(setup.secret));
@@ -384,6 +390,50 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
         .count(),
       0,
     );
+    const mistaken = await page.evaluate(async () => {
+      const p = billingData.products.find((p) => p.name === "Fixture Workshop");
+      const draft = await billingMutation("draft", {
+        customer: { name: "Delete Fixture", email: "delete@example.test" },
+        due: day,
+        items: [
+          {
+            productId: p.id,
+            name: p.name,
+            description: p.description,
+            formatting: { description: p.formatting?.description },
+            quantity: 1,
+            price: p.price,
+            tax: p.tax,
+            discount: 0,
+          },
+        ],
+        terms: p.terms,
+        payment: "Fixture payment instructions.",
+        approved: true,
+      });
+      await refreshBilling();
+      return draft;
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator(`[data-document-delete="${mistaken.id}"]`).click();
+    await page
+      .locator(`[data-draft-restore="${mistaken.id}"]`)
+      .waitFor({ state: "attached" });
+    await page.getByText(/Deleted Drafts \(/).click();
+    await page.locator(`[data-draft-restore="${mistaken.id}"]`).click();
+    await page.locator(`[data-document-issue="${mistaken.id}"]`).click();
+    await page
+      .locator(`[data-document-delete="${mistaken.id}"]`)
+      .filter({ hasText: "Delete Issued Invoice" })
+      .waitFor();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator(`[data-document-delete="${mistaken.id}"]`).click();
+    await page
+      .locator(`[data-document-delete="${mistaken.id}"]`)
+      .waitFor({ state: "detached" });
+    const afterDelete = await page.evaluate(() => api("/api/billing"));
+    assert(!afterDelete.documents.some((d) => d.id === mistaken.id));
+    assert(afterDelete.payments.length > 0);
     await page.locator('[data-view="clients"]').first().click();
     await page.getByRole("button", { name: "Add Client", exact: true }).click();
     for (const [n, v] of Object.entries({

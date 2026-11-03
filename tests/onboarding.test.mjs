@@ -159,6 +159,21 @@ test("private onboarding never grants CRM login before full verified payment", a
     assert.equal(access.status, 200);
     assert.equal(access.cookie, undefined);
     assert.equal(access.data.questions.length, 30);
+    assert.equal(access.data.privacy.href, "/privacy");
+    const publicPolicy = await request("/api/privacy");
+    assert.equal(publicPolicy.status, 200);
+    assert.match(publicPolicy.data.text, /Oregon/);
+    const policyPage = await fetch(origin + "/privacy");
+    assert.equal(policyPage.status, 200);
+    assert.match(await policyPage.text(), /Privacy Policy/);
+    const policyPDF = await fetch(origin + "/privacy.pdf");
+    assert.equal(
+      Buffer.from(await policyPDF.arrayBuffer())
+        .subarray(0, 4)
+        .toString(),
+      "%PDF",
+    );
+
     assert(!JSON.stringify(access.data).includes("PRIVATE COACH NOTES"));
     assert.equal(
       (
@@ -198,6 +213,8 @@ test("private onboarding never grants CRM login before full verified payment", a
           body: {
             action: "intake",
             answers: Array(30).fill("Answer"),
+            coachingConsent: true,
+            privacyVersion: access.data.privacy.version,
             submit: true,
           },
         })
@@ -207,6 +224,30 @@ test("private onboarding never grants CRM login before full verified payment", a
     snapshot = (await request("/api/state", owner)).data;
     snapshot.state.programmes.new = { deposit: true, balance: false };
     await save();
+    const noConsent = await request("/api/onboarding-access", {
+      method: "POST",
+      token: capability,
+      body: {
+        action: "intake",
+        answers: Array(30).fill("Answer"),
+        submit: true,
+      },
+    });
+    assert.equal(noConsent.status, 409);
+    assert.match(noConsent.data.error, /Privacy Policy/);
+    const outdatedConsent = await request("/api/onboarding-access", {
+      method: "POST",
+      token: capability,
+      body: {
+        action: "intake",
+        answers: Array(30).fill("Answer"),
+        submit: true,
+        coachingConsent: true,
+        privacyVersion: "old-policy",
+      },
+    });
+    assert.equal(outdatedConsent.status, 409);
+
     assert.equal(
       (
         await request("/api/onboarding-access", {
@@ -215,6 +256,8 @@ test("private onboarding never grants CRM login before full verified payment", a
           body: {
             action: "intake",
             answers: Array(30).fill("Answer"),
+            coachingConsent: true,
+            privacyVersion: access.data.privacy.version,
             submit: true,
           },
         })
@@ -327,6 +370,8 @@ test("private onboarding never grants CRM login before full verified payment", a
             body: {
               action: "intake",
               answers: Array(30).fill("Completed"),
+              coachingConsent: true,
+              privacyVersion: limited.data.privacy.version,
               submit: true,
             },
           })

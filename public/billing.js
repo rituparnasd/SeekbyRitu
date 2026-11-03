@@ -56,7 +56,7 @@ function billingPage() {
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .map(
           (d) =>
-            `<div class="list-item"><div class="row"><div><h3>${esc(d.reference || "Draft Invoice")} · ${esc(d.customer.name)}</h3><p class="small muted">${esc(d.items.map((i) => i.name).join(", "))} · ${billMoney(d.total, d.currency)} · ${esc(d.status)} · Version ${d.version}${d.revises ? " · Revises " + esc(d.revises) : ""}</p></div><span class="badge ${d.status === "Issued" ? "green" : ""}">${esc(d.status)}</span></div><div class="actions"><a class="btn subtle" target="_blank" rel="noopener" href="/api/billing/pdf?id=${d.id}&kind=invoice">Preview Invoice</a>${d.requiresAgreement !== false ? `<a class="btn subtle" target="_blank" rel="noopener" href="/api/billing/pdf?id=${d.id}&kind=agreement">Preview Service Agreement</a>` : ""}${d.status === "Draft" ? `<button class="btn subtle" data-document-edit="${d.id}">Customise</button><button class="btn primary" data-document-issue="${d.id}">Issue Documents</button>` : `<button class="btn subtle" data-document-revise="${d.id}">Create Revision</button><button class="btn" data-record-payment="${d.id}">Record Verified Payment</button><button class="btn primary" data-document-queue="${d.id}">Prepare Email</button>`}</div>${(
+            `<div class="list-item"><div class="row"><div><h3>${esc(d.reference || "Draft Invoice")} · ${esc(d.customer.name)}</h3><p class="small muted">${esc(d.items.map((i) => i.name).join(", "))} · ${billMoney(d.total, d.currency)} · ${esc(d.status)} · Version ${d.version}${d.revises ? " · Revises " + esc(d.revises) : ""}</p></div><span class="badge ${d.status === "Issued" ? "green" : ""}">${esc(d.status)}</span></div><div class="actions"><a class="btn subtle" target="_blank" rel="noopener" href="/api/billing/pdf?id=${d.id}&kind=invoice">Preview Invoice</a>${d.requiresAgreement !== false ? `<a class="btn subtle" target="_blank" rel="noopener" href="/api/billing/pdf?id=${d.id}&kind=agreement">Preview Service Agreement</a>` : ""}${d.status === "Draft" ? `<button class="btn subtle" data-document-edit="${d.id}">Customise</button><button class="btn primary" data-document-issue="${d.id}">Issue Documents</button><button class="btn subtle" data-document-delete="${d.id}">Delete Draft</button>` : `<button class="btn subtle" data-document-revise="${d.id}">Create Revision</button><button class="btn" data-record-payment="${d.id}">Record Verified Payment</button><button class="btn primary" data-document-queue="${d.id}">Prepare Email</button><button class="btn subtle" data-document-delete="${d.id}">Delete Issued Invoice</button>`}</div>${(
               billingData.payments || []
             )
               .filter((p) => p.invoiceId === d.id)
@@ -70,6 +70,17 @@ function billingPage() {
       '<p class="muted">Your invoices and Service Agreements will appear here.</p>'
     }</div>`;
   }
+  if (!isCatalogue && billingData.trash?.length)
+    html += `<details class="card"><summary>Deleted Drafts (${billingData.trash.length})</summary>${billingData.trash
+      .filter(
+        (d) =>
+          !billingCustomerFilter || d.customer.email === billingCustomerFilter,
+      )
+      .map(
+        (d) =>
+          `<div class="list-item row"><span>${esc(d.customer.name)} · ${billMoney(d.total, d.currency)}</span><button class="btn" data-draft-restore="${d.id}">Restore Draft</button></div>`,
+      )
+      .join("")}</details>`;
   return html;
 }
 function productForm(p) {
@@ -427,6 +438,41 @@ function bindBilling() {
     } finally {
       b.disabled = false;
     }
+  });
+  document.querySelectorAll("[data-document-delete]").forEach((button) => {
+    button.onclick = action(async () => {
+      const d = billingData.documents.find(
+        (d) => d.id === button.dataset.documentDelete,
+      );
+      const message =
+        d.status === "Draft"
+          ? `Delete this draft for ${d.customer.name}? You can restore it from Deleted Drafts.`
+          : `Permanently delete mistaken invoice ${d.reference} for ${d.customer.name}? An email already sent cannot be recalled. Linked payment records prevent deletion.`;
+      if (!window.confirm(message)) return;
+      const result = await billingMutation("delete", {
+        id: d.id,
+        version: d.version,
+        confirm: true,
+      });
+      if (documentEditor?.id === d.id) documentEditor = null;
+      await refreshWorkspaceState();
+      await refreshBilling();
+      toast(
+        result.restorable
+          ? "Draft deleted. Restore is available below."
+          : "Mistaken invoice deleted from Billing.",
+      );
+    });
+  });
+  document.querySelectorAll("[data-draft-restore]").forEach((button) => {
+    button.onclick = action(async () => {
+      const d = billingData.trash.find(
+        (d) => d.id === button.dataset.draftRestore,
+      );
+      await billingMutation("restore", { id: d.id, version: d.version });
+      await refreshBilling();
+      toast("Draft restored.");
+    });
   });
   document.querySelectorAll("[data-document-edit]").forEach(
     (b) =>

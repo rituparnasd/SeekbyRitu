@@ -23,7 +23,7 @@ async function api(path, options = {}) {
   return data;
 }
 function layout(content) {
-  root.innerHTML = `<main class="auth-shell"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>seekbyritu</span></div><p class="eyebrow">PRIVATE COACHING WORKSPACE</p><section class="card">${content}</section><p class="small muted">Your account data is stored on the configured server. No sample clients are loaded.</p></main>`;
+  root.innerHTML = `<main class="auth-shell"><div class="brand"><img class="brand-logo" src="/assets/seekbyritu-logo.png" alt="Seek by Ritu original logo"><span>seekbyritu</span></div><p class="eyebrow">PRIVATE COACHING WORKSPACE</p><section class="card">${content}</section><p class="small muted">Your account data is stored on the configured server. No sample clients are loaded.</p><p><a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></p></main>`;
 }
 function error(message) {
   const el = document.querySelector("#auth-error");
