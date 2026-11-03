@@ -73,7 +73,7 @@ function billingPage() {
   return html;
 }
 function productForm(p) {
-  return `<form id="product-form" class="card"><h2>${p.id ? "Edit Defaults" : "New Product / Service"}</h2><p class="small muted">Updates apply to future selections. Existing client documents keep their original details.</p><div class="form-grid"><div class="field"><label for="product-name">Name</label><input id="product-name" name="name" value="${esc(p.name || "")}" required maxlength="200"></div><div class="field"><label for="product-kind">Type</label><select id="product-kind" name="kind"><option ${p.kind === "Service" ? "selected" : ""}>Service</option><option ${p.kind === "Product" ? "selected" : ""}>Product</option></select></div><div class="field"><label for="product-price">Default Price</label><input id="product-price" name="price" type="number" min="0" max="10000000" step=".01" value="${p.price || 0}" required></div><div class="field"><label for="product-currency">Currency</label><input id="product-currency" name="currency" value="${esc(p.currency || "CAD")}" pattern="[A-Za-z]{3}" maxlength="3" required></div><div class="field"><label for="product-tax">Applicable Tax (%)</label><input id="product-tax" name="tax" type="number" min="0" max="100" step=".01" value="${p.tax || 0}" required></div></div><div class="field"><label for="product-description">Invoice Description</label><textarea id="product-description" name="description" maxlength="2000">${esc(p.description || "")}</textarea></div><div class="field"><label for="product-terms">Default Service Agreement</label><textarea id="product-terms" name="terms" class="agreement-editor" maxlength="20000">${esc(p.terms || "")}</textarea></div><label><input name="requiresAgreement" type="checkbox" ${(p.requiresAgreement ?? p.kind !== "Product") ? "checked" : ""}> Include a Service Agreement by default.</label><label><input name="approved" type="checkbox" ${p.approved ? "checked" : ""}> I have reviewed and approved this template.</label><label><input name="archived" type="checkbox" ${p.archived ? "checked" : ""}> Archive this offer from new invoice selections.</label><div class="actions"><button class="btn primary">Save Defaults</button><button type="button" class="btn" id="cancel-product">Cancel</button></div><p class="small muted">Tax defaults to 0%. Set the rate that applies to your business and this offer.</p></form>`;
+  return `<form id="product-form" class="card"><h2>${p.id ? "Edit Defaults" : "New Product / Service"}</h2><p class="small muted">Updates apply to future selections. Existing client documents keep their original details.</p><div class="form-grid"><div class="field"><label for="product-name">Name</label><input id="product-name" name="name" value="${esc(p.name || "")}" required maxlength="200"></div><div class="field"><label for="product-kind">Type</label><select id="product-kind" name="kind"><option ${p.kind === "Service" ? "selected" : ""}>Service</option><option ${p.kind === "Product" ? "selected" : ""}>Product</option></select></div><div class="field"><label for="product-price">Default Price</label><input id="product-price" name="price" type="number" min="0" max="10000000" step=".01" value="${p.price || 0}" required></div><div class="field"><label for="product-currency">Currency</label><input id="product-currency" name="currency" value="${esc(p.currency || "CAD")}" pattern="[A-Za-z]{3}" maxlength="3" required></div><div class="field"><label for="product-tax">Applicable Tax (%)</label><input id="product-tax" name="tax" type="number" min="0" max="100" step=".01" value="${p.tax || 0}" required></div></div><div class="field"><label for="product-description">Invoice Description</label><textarea id="product-description" name="description" maxlength="2000">${esc(p.description || "")}</textarea></div><div class="field"><label for="product-terms">Default Service Agreement</label><textarea id="product-terms" name="terms" class="agreement-editor" maxlength="20000">${esc(p.terms || "")}</textarea></div><label><input name="requiresAgreement" type="checkbox" ${(p.requiresAgreement ?? p.kind !== "Product") ? "checked" : ""}> Include a Service Agreement by default.</label><label><input name="approved" type="checkbox" ${p.approved ? "checked" : ""}> I have reviewed and approved this template.</label><label><input name="archived" type="checkbox" ${p.archived ? "checked" : ""}> Archive this offer from new invoice selections.</label><div class="actions"><button class="btn primary">Save Defaults</button><button type="button" class="btn" id="save-product-draft">Save As Draft</button><button type="button" class="btn" id="cancel-product">Cancel</button></div><p class="small muted">Tax defaults to 0%. Set the rate that applies to your business and this offer.</p></form>`;
 }
 function newBillingDraft() {
   const client = state.leads.find((l) => l.email === billingCustomerFilter);
@@ -99,6 +99,7 @@ function newBillingDraft() {
     due: day,
     items: p ? [lineFromProduct(p)] : [],
     terms: p?.terms || "",
+    formatting: { terms: p?.formatting?.terms },
     requiresAgreement: p?.requiresAgreement ?? p?.kind !== "Product",
     approved: false,
     payment:
@@ -113,6 +114,7 @@ function lineFromProduct(p) {
     productId: p.id,
     name: p.name,
     description: p.description,
+    formatting: { description: p.formatting?.description },
     quantity: 1,
     price: p.price,
     tax: p.tax,
@@ -132,6 +134,7 @@ function editorFromDocument(d) {
 function captureInvoice() {
   const f = document.querySelector("#invoice-form");
   if (!f) return;
+  const formatting = documentEditing.capture(f);
   const v = Object.fromEntries(new FormData(f));
   Object.assign(documentEditor, {
     customer: { name: v.customerName, email: v.customerEmail },
@@ -139,11 +142,17 @@ function captureInvoice() {
     payment: v.payment,
     notes: v.notes,
     terms: v.terms,
+    formatting: {
+      terms: formatting.terms,
+      payment: formatting.payment,
+      notes: formatting.notes,
+    },
     approved: f.elements.approved.checked,
     requiresAgreement: f.elements.requiresAgreement.checked,
   });
   documentEditor.items = documentEditor.items.map((i, n) => ({
     ...i,
+    formatting: { description: formatting[`description-${n}`] },
     ...Object.fromEntries(
       ["name", "description", "quantity", "price", "discount", "tax"].map(
         (k) => [k, v[`${k}-${n}`]],
@@ -165,7 +174,10 @@ async function billingMutation(path, data) {
   ).result;
 }
 function bindBilling() {
-  documentEditing.mount();
+  documentEditing.mount(document, {
+    product: productEditor,
+    invoice: documentEditor,
+  });
   if (
     !["catalogue", "billing"].includes(state.view) ||
     window.__session.role !== "coach"
@@ -225,9 +237,11 @@ function bindBilling() {
       b = f.querySelector('button:not([type="button"])');
     b.disabled = true;
     try {
+      const formatting = documentEditing.capture(f);
       await billingMutation("product", {
         ...productEditor,
         ...Object.fromEntries(new FormData(f)),
+        formatting,
         approved: f.elements.approved.checked,
         requiresAgreement: f.elements.requiresAgreement.checked,
         archived: f.elements.archived.checked,
@@ -236,10 +250,25 @@ function bindBilling() {
       await refreshBilling();
       toast("Product defaults saved.");
     } catch (err) {
-      toast(err.message);
+      let errorBox = f.querySelector("[data-document-save-error]");
+      if (!errorBox) {
+        errorBox = document.createElement("div");
+        errorBox.className = "note document-save-error";
+        errorBox.dataset.documentSaveError = "true";
+        errorBox.setAttribute("role", "alert");
+        f.append(errorBox);
+      }
+      errorBox.textContent = err.message;
+      errorBox.scrollIntoView({ block: "nearest" });
+      toast("Not saved yet. See the message below your editor.");
     } finally {
       b.disabled = false;
     }
+  });
+  on("#save-product-draft", "click", () => {
+    const form = document.querySelector("#product-form");
+    form.elements.approved.checked = false;
+    form.requestSubmit();
   });
   on("#new-invoice", "click", () => {
     documentEditor = newBillingDraft();
@@ -288,6 +317,7 @@ function bindBilling() {
             ? innerCodePayments.instructions(p.id, p.price, p.currency)
             : "";
           documentEditor.terms = p.terms;
+          documentEditor.formatting = { terms: p.formatting?.terms };
           documentEditor.requiresAgreement =
             p.requiresAgreement ?? p.kind !== "Product";
         }
@@ -337,6 +367,10 @@ function bindBilling() {
           currency: original.currency,
           tax: Number(item.tax),
           terms: documentEditor.terms,
+          formatting: {
+            description: item.formatting?.description,
+            terms: documentEditor.formatting?.terms,
+          },
           approved: false,
           archived: false,
         };
@@ -362,7 +396,18 @@ function bindBilling() {
       await refreshBilling();
       toast("Draft saved. Preview both documents below.");
     } catch (err) {
-      toast(err.message);
+      const f = e.target;
+      let errorBox = f.querySelector("[data-document-save-error]");
+      if (!errorBox) {
+        errorBox = document.createElement("div");
+        errorBox.className = "note document-save-error";
+        errorBox.dataset.documentSaveError = "true";
+        errorBox.setAttribute("role", "alert");
+        f.append(errorBox);
+      }
+      errorBox.textContent = err.message;
+      errorBox.scrollIntoView({ block: "nearest" });
+      toast("Not saved yet. See the message below your editor.");
     } finally {
       b.disabled = false;
     }

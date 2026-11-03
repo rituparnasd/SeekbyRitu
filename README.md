@@ -116,6 +116,8 @@ The `onrender.com` hostname is only the current public address. A custom subdoma
 
 Coach-only **Products & Services** stores offers, prices, currency, tax rates and default Service Agreement templates. Create variants or archive offers without changing existing customer documents. The initial Inner Code offer is a draft; review its terms before using it.
 
+Document fields in Products & Services and Billing use a locally hosted rich-text editor: font family/size, bold/italic/underline/strikethrough, subscript/superscript, colour/highlight, headings, all four text alignments, line spacing, lists, indentation and undo/redo. Formatting is saved with the text and carried into PDF snapshots. Approval warnings quote the unfinished wording and preserve the form; **Save As Draft** keeps an unfinished catalogue template without approving it.
+
 **Billing** supports existing CRM clients or manually entered customers, multiple items, per-line discounts and tax, and client-specific invoice descriptions, payment schedules and agreement terms. Inner Code has deposit/balance amount presets. These presets do not verify a payment or activate coaching. The existing enrollment payment verification flow remains authoritative for account activation.
 
 Save a draft, preview both PDFs, then issue reviewed documents. Issued records receive a unique reference and freeze their customer, business, offer, price and terms snapshots. Corrections create a linked draft revision; prior records remain intact. Numbers and calculations are authoritative on the server, and stale edits are rejected. Signed copies can be retained externally; this generator does not add a separate identity-verified electronic signing service.

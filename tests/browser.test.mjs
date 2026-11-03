@@ -127,57 +127,136 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await page.locator("#product-name").fill("Fixture Workshop");
     await page.locator("#product-price").fill("19.99");
     await page.locator("#product-tax").fill("5");
-    await page
-      .locator("#product-description")
-      .fill("Personalised workshop\nPractical exercises");
+    const description = page.getByRole("textbox", {
+      name: "Invoice Description",
+      exact: true,
+    });
+    await description.fill("Personalised workshop\nPractical exercises");
     await page.locator("#product-description").evaluate((field) => {
-      field.focus();
-      field.setSelectionRange(0, field.value.length);
+      const q = documentEditing.get(field);
+      q.setSelection(0, q.getLength() - 1);
     });
     const editor = page
-      .locator(".document-text-editor")
+      .locator(".document-rich-editor")
       .filter({ has: page.locator("#product-description") });
     await editor
-      .getByRole("button", {
-        name: "Toggle bullet points on selected lines",
-        exact: true,
-      })
+      .getByRole("button", { name: "Bulleted List", exact: true })
       .click();
+    await editor.getByRole("button", { name: "Bold", exact: true }).click();
+    await editor.getByRole("button", { name: "Italic", exact: true }).click();
+    await editor.getByRole("button", { name: "Justify", exact: true }).click();
+    const richState = await page
+      .locator("#product-description")
+      .evaluate((field) =>
+        JSON.parse(JSON.stringify(documentEditing.get(field).getContents())),
+      );
+    assert(richState.ops.some((op) => op.attributes?.bold));
+    assert(richState.ops.some((op) => op.attributes?.italic));
+    assert(richState.ops.some((op) => op.attributes?.align === "justify"));
+    assert(richState.ops.some((op) => op.attributes?.list === "bullet"));
     assert.equal(
-      await page.locator("#product-description").inputValue(),
-      "• Personalised workshop\n• Practical exercises",
+      await editor
+        .locator(".ql-align-justify")
+        .first()
+        .evaluate((el) => getComputedStyle(el).textAlign),
+      "justify",
     );
+    for (const alignment of ["center", "right", "", "justify"]) {
+      await editor
+        .locator("select.ql-align")
+        .selectOption(alignment, { force: true });
+      assert.equal(
+        await editor
+          .locator(".ql-editor li")
+          .first()
+          .evaluate((el) => getComputedStyle(el).textAlign),
+        alignment || "left",
+      );
+    }
     await editor
-      .getByRole("button", { name: "Indent selected lines (Tab)", exact: true })
-      .click();
-    assert.match(
-      await page.locator("#product-description").inputValue(),
-      /^  • /,
-    );
+      .locator("select.ql-size")
+      .selectOption("20pt", { force: true });
     await editor
-      .getByRole("button", { name: "Undo (Ctrl/Cmd+Z)", exact: true })
+      .locator("select.ql-font")
+      .selectOption("serif", { force: true });
+    await editor
+      .locator("select.ql-color")
+      .selectOption("#175cd3", { force: true });
+    await editor
+      .locator("select.ql-background")
+      .selectOption("#fff3a3", { force: true });
+    await editor
+      .locator("select.ql-lineheight")
+      .selectOption("2", { force: true });
+    await editor
+      .getByRole("button", { name: "Underline", exact: true })
       .click();
-    assert.equal(
-      await page.locator("#product-description").inputValue(),
-      "• Personalised workshop\n• Practical exercises",
-    );
-    await page.locator("#product-description").press("Control+End");
-    await page.locator("#product-description").press("Enter");
+    await editor
+      .getByRole("button", { name: "Strikethrough", exact: true })
+      .click();
+    await editor
+      .getByRole("button", { name: "Superscript", exact: true })
+      .click();
+    const fontState = await page
+      .locator("#product-description")
+      .evaluate((field) => documentEditing.get(field).getContents());
+    for (const [key, value] of Object.entries({
+      size: "20pt",
+      font: "serif",
+      color: "#175cd3",
+      background: "#fff3a3",
+      underline: true,
+      strike: true,
+      script: "super",
+    }))
+      assert(
+        fontState.ops.some((op) => op.attributes?.[key] === value),
+        `Missing ${key}`,
+      );
+    assert(fontState.ops.some((op) => op.attributes?.lineheight === "2"));
+    await page
+      .locator("#product-description")
+      .evaluate(
+        (field, delta) => documentEditing.get(field).setContents(delta, "user"),
+        richState,
+      );
+    await editor
+      .getByRole("button", { name: "Increase Indent", exact: true })
+      .click();
     assert(
-      (await page.locator("#product-description").inputValue()).endsWith(
-        "\n• ",
+      await page.locator("#product-description").evaluate((field) =>
+        documentEditing
+          .get(field)
+          .getContents()
+          .ops.some((op) => op.attributes?.indent === 1),
       ),
     );
-    await page.locator("#product-description").press("Enter");
-    assert(
-      (await page.locator("#product-description").inputValue()).endsWith("\n"),
+    await editor.getByRole("button", { name: "Undo", exact: true }).click();
+    assert.equal(
+      await page.locator("#product-description").inputValue(),
+      "Personalised workshop\nPractical exercises",
     );
-    assert.equal(await page.locator("#product-form").count(), 1);
+    const terms = page.getByRole("textbox", {
+      name: "Default Service Agreement",
+      exact: true,
+    });
+    await terms.fill("Cancellation must be agreed before signing.");
+    await page.locator('#product-form [name="approved"]').check();
     await page
-      .locator("#product-terms")
-      .fill(
-        "One workshop. Cancellation accepted up to seven days before the event. Payment is due before attendance.",
-      );
+      .getByRole("button", { name: "Save Defaults", exact: true })
+      .click();
+    await page.locator("[data-document-save-error]").waitFor();
+    assert.match(
+      await page.locator("[data-document-save-error]").textContent(),
+      /Cancellation must be agreed before signing/,
+    );
+    assert.match(
+      await terms.innerText(),
+      /Cancellation must be agreed before signing/,
+    );
+    await terms.fill(
+      "One workshop. Cancellation accepted up to seven days before the event. Payment is due before attendance.",
+    );
     await page.locator('#product-form [name="approved"]').check();
     await page
       .getByRole("button", { name: "Save Defaults", exact: true })
@@ -195,7 +274,10 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     await page.locator("#billing-name").fill("Invoice Fixture");
     await page.locator("#billing-email").fill("invoice@example.test");
     await page
-      .locator("#billing-payment")
+      .getByRole("textbox", {
+        name: "Payment Instructions / Schedule",
+        exact: true,
+      })
       .fill("Pay through the agreed fixture payment method.");
     await page.locator('#invoice-form [name="approved"]').check();
     await page
@@ -240,6 +322,21 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     );
     assert.equal((await receiptPDF.body()).subarray(0, 4).toString(), "%PDF");
     assert.equal(billing.documents[0].total, 2099);
+    assert(
+      billing.documents[0].items[0].formatting.description.ops.some(
+        (op) => op.attributes?.bold,
+      ),
+    );
+    assert(
+      billing.documents[0].items[0].formatting.description.ops.some(
+        (op) => op.attributes?.italic,
+      ),
+    );
+    assert(
+      billing.documents[0].items[0].formatting.description.ops.some(
+        (op) => op.attributes?.align === "justify",
+      ),
+    );
     const invoicePDF = await page.request.get(
       `${origin}/api/billing/pdf?id=${billing.documents[0].id}&kind=invoice`,
     );

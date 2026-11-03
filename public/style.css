@@ -1309,3 +1309,121 @@ details.card[open] > summary {
   line-height: 1.5;
   color: #687772;
 }
+
+.document-rich-editor {
+  margin: 4px 0 14px;
+  background: #fff;
+  border-radius: 8px;
+}
+.document-rich-editor .ql-toolbar.ql-snow {
+  border-color: #dce3dd;
+  border-radius: 8px 8px 0 0;
+  background: #f7f9f8;
+  font-family: inherit;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.document-rich-editor .ql-container.ql-snow {
+  border-color: #dce3dd;
+  border-radius: 0 0 8px 8px;
+  font-family: inherit;
+  font-size: 11pt;
+}
+.document-rich-editor .ql-editor {
+  min-height: 160px;
+  max-height: 640px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  padding: 16px;
+}
+.document-rich-editor:has(.agreement-editor) .ql-editor {
+  min-height: 340px;
+}
+.document-rich-editor .ql-toolbar button.ql-justify {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.document-rich-editor .ql-snow .ql-picker.ql-size .ql-picker-label::before,
+.document-rich-editor .ql-snow .ql-picker.ql-size .ql-picker-item::before {
+  content: attr(data-value);
+}
+.document-rich-editor
+  .ql-snow
+  .ql-picker.ql-size
+  .ql-picker-label:not([data-value])::before,
+.document-rich-editor
+  .ql-snow
+  .ql-picker.ql-size
+  .ql-picker-item:not([data-value])::before {
+  content: "11 pt";
+}
+.document-rich-editor .ql-toolbar.ql-snow .ql-formats {
+  margin-right: 8px;
+}
+.document-rich-editor .ql-toolbar button {
+  min-width: 30px;
+  min-height: 30px;
+}
+.document-rich-editor .ql-toolbar button:focus-visible {
+  outline: 2px solid #0b3027;
+}
+.document-rich-editor .ql-editor:focus {
+  outline: 2px solid #0b3027;
+  outline-offset: -2px;
+}
+.document-save-error {
+  white-space: pre-wrap;
+}
+.document-rich-editor .ql-editor {
+  line-height: 1.5;
+}
+.document-rich-editor .ql-font-serif {
+  font-family: SeekSerif, Georgia, serif;
+}
+.document-rich-editor .ql-font-helvetica {
+  font-family: Helvetica, Arial, sans-serif;
+}
+.document-rich-editor .ql-font-times {
+  font-family: "Times New Roman", Times, serif;
+}
+.document-rich-editor .ql-font-monospace {
+  font-family: Courier, monospace;
+}
+.document-rich-editor .ql-picker.ql-font [data-value="serif"]::before {
+  content: "Noto Serif";
+}
+.document-rich-editor .ql-picker.ql-font [data-value="helvetica"]::before {
+  content: "Helvetica";
+}
+.document-rich-editor .ql-picker.ql-font [data-value="times"]::before {
+  content: "Times";
+}
+.document-rich-editor .ql-picker.ql-font [data-value="monospace"]::before {
+  content: "Courier";
+}
+.document-rich-editor
+  .ql-picker.ql-font
+  :not([data-value]).ql-picker-label::before,
+.document-rich-editor
+  .ql-picker.ql-font
+  :not([data-value]).ql-picker-item::before {
+  content: "Open Sans";
+}
+.document-rich-editor .ql-picker.ql-lineheight {
+  width: 65px;
+}
+.document-rich-editor .ql-picker.ql-lineheight .ql-picker-label::before,
+.document-rich-editor .ql-picker.ql-lineheight .ql-picker-item::before {
+  content: attr(data-value);
+}
+.document-rich-editor
+  .ql-picker.ql-lineheight
+  .ql-picker-label:not([data-value])::before {
+  content: "1.5";
+}
+.document-rich-editor .ql-picker-options {
+  max-height: 240px;
+  overflow-y: auto;
+}

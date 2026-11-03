@@ -1,3 +1,7 @@
+import {
+  removeRequestedDrafts,
+  draftCleanupMarker,
+} from "./lib/billing-draft-cleanup.mjs";
 import { hasUnresolvedTerms } from "./lib/terms-review.mjs";
 import { emailVerification } from "./lib/email-verification.mjs";
 import { readiness } from "./lib/readiness.mjs";
@@ -58,6 +62,7 @@ if (!missing.length) {
     crypt = encryption(process.env.DATA_ENCRYPTION_KEY);
     stage = "database";
     db = await database();
+    if (production) await removeRequestedDrafts(db, crypt);
   } catch (error) {
     initError = true;
     setupDiagnostic = setupDiagnosis(stage, error);
@@ -659,6 +664,11 @@ async function financialRecord(s, id, kind, stage) {
   const cfg = globalThis.innerCodePackages.get(s.programmes[id]);
   if (!cfg.deposit) stage = "balance";
   const finalTerms = await approvedProgrammeTerms(cfg.id);
+  const templateRows = await db.query(
+    "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key=?",
+    [cfg.id],
+  );
+  const template = templateRows[0] ? crypt.open(templateRows[0].payload) : null;
   const l = s.leads.find((l) => l.id === id);
   if (!l) fail(404, "Client not found");
   const version =
@@ -683,6 +693,10 @@ async function financialRecord(s, id, kind, stage) {
   if (rows[0]) return crypt.open(rows[0].payload);
   const record = {
     kind,
+    formatting:
+      kind === "agreement" && template?.terms === finalTerms
+        ? { terms: template.formatting?.terms }
+        : undefined,
     isTest: !!l.isTest,
     business,
     client: l.first + " " + l.last,
@@ -1491,6 +1505,13 @@ const server = http.createServer(async (req, res) => {
             approved: !!(await approvedProgrammeTerms(p.id)),
           })),
         );
+        const cleanupRows = await db.query(
+          "SELECT value FROM metadata WHERE name=?",
+          [draftCleanupMarker],
+        );
+        const draftCleanup = cleanupRows[0]
+          ? JSON.parse(cleanupRows[0].value)
+          : null;
         const inbox = await inboxVerification.read();
         const now = new Date();
         return json(res, 200, {
@@ -1503,6 +1524,9 @@ const server = http.createServer(async (req, res) => {
           }),
           checks: {
             Storage: storage,
+            DraftCleanup: draftCleanup
+              ? `${draftCleanup.removed} requested drafts removed; issued documents and new drafts retained`
+              : "Not run on this environment",
             ProgrammeTerms: packageReadiness.every((p) => p.approved)
               ? "Reviewed terms configured for all three packages"
               : "Review in Products & Services: " +
@@ -1986,6 +2010,9 @@ const server = http.createServer(async (req, res) => {
       "/app.js": "app.js",
       "/billing.js": "billing.js",
       "/text-editor.js": "text-editor.js",
+      "/document-format.js": "document-format.js",
+      "/vendor/quill.js": "../node_modules/quill/dist/quill.js",
+      "/vendor/quill.snow.css": "../node_modules/quill/dist/quill.snow.css",
       "/workspace.js": "workspace.js",
       "/intake.js": "intake.js",
       "/assets/fonts/OpenSans-Semibold.ttf":
