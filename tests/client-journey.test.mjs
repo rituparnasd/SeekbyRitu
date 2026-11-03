@@ -1,3 +1,4 @@
+import "../public/calendar.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -69,7 +70,9 @@ test("real client browser: habit, practice, check-in and journal persistence; se
     assert.equal(login.status, 200);
     const owner = { cookie: login.cookie, csrf: login.data.csrf };
     let snap = (await req("/api/state", owner)).data;
-    const start = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const start = globalThis.coachingTime.dateAt(
+      new Date(Date.now() - 86400000),
+    );
     snap.state.leads = [
       {
         id: "journey",

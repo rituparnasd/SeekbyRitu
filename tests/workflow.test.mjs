@@ -101,3 +101,51 @@ test("activation also respects walkthroughs and coach preparation blocks", () =>
     assert.match(s.workflow.a.activationIssue, /conflict/);
   }
 });
+
+test("walkthrough and activation messages show both zones with dates, including old unsent drafts", () => {
+  const s = {
+    leads: [{ id: "a", first: "A" }],
+    programmes: {
+      a: {
+        deposit: true,
+        balance: true,
+        status: "Not Activated",
+        agreed: true,
+        timeZone: globalThis.coachingTime.calgary,
+        localTime: "14:00",
+        time: "21:00",
+        verifiedAt: { balance: "2026-11-03T01:00:00Z" },
+      },
+    },
+    intakes: { a: { submitted: "2026-11-02T12:00:00Z" } },
+    workflow: {
+      a: {
+        walkthroughDone: "2026-11-02",
+        booking: { date: "2026-11-02", time: "21:00" },
+      },
+    },
+    outbox: {
+      "a:booking": {
+        status: "Draft",
+        subject: "Old",
+        body: "Old UTC-only message",
+      },
+    },
+  };
+  reconcileWorkflow(s, "2026-11-02");
+  assert.match(
+    s.outbox["a:booking"].body,
+    /Calgary Time: 02 Nov 2026, 02:00 pm/,
+  );
+  assert.match(s.outbox["a:booking"].body, /India Time: 03 Nov 2026, 02:30 am/);
+  assert.equal(s.programmes.a.start, "2026-11-03");
+  assert(
+    s.programmes.a.calls.every(
+      (c) =>
+        globalThis.coachingTime.local(globalThis.coachingTime.utc(c)).time ===
+        "14:00",
+    ),
+  );
+  assert.match(s.outbox["a:paid"].body, /Calgary Time/);
+  assert.match(s.outbox["a:paid"].body, /India Time/);
+});

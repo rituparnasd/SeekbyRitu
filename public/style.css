@@ -1251,3 +1251,7 @@ details.card[open] > summary {
   gap: 10px;
   margin: 16px 0;
 }
+.time-preview {
+  margin: 8px 0 16px;
+  overflow-wrap: anywhere;
+}

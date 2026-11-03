@@ -7,7 +7,7 @@ const esc = (s) =>
         c
       ],
   );
-const day = new Date().toISOString().slice(0, 10);
+const day = coachingTime.today();
 const clients = [];
 const bilingualPlans = [];
 const saved = window.__initialState || {};
@@ -195,6 +195,7 @@ function render() {
   bindServerActions();
   bindBilling();
   bindSimpleWorkspace();
+  bindTimePreviews();
   save();
 }
 function title(k, sub, action = "") {
@@ -324,7 +325,8 @@ function habitList(details = false, readonly = false) {
 function today() {
   if (
     state.mode === "client" &&
-    (!programme(c().id).balance || programme(c().id).start > day)
+    (!innerCodePackages.paid(programme(c().id)) ||
+      programme(c().id).start > day)
   )
     return title(
       "Your Programme Is Not Active Yet",
@@ -452,7 +454,7 @@ function reports() {
       `<div class="actions">${button("Print / Save PDF", "print", "primary")}${button("Download CSV", "csv")}</div>`,
     ) +
     (state.mode === "coach" ? selector() : "") +
-    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Programme day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>95%</strong><span>No automatic refund decision</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${groupedHabits("summary")}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
+    `<div class="hero"><div class="eyebrow">PERSONAL PROGRESS REPORT</div><h2>${esc(c().name)}</h2><p>${esc(clientGoal())}</p><span class="badge">Programme day ${programmeDay(c().id)} · ${day}</span></div><div class="stats"><div class="stat"><span>OBSERVED COMPLETION</span><strong>${score === null ? "—" : score + "%"}</strong><span>${completed} completed / ${total} recorded habit slots</span></div><div class="stat"><span>CHECK-INS SUBMITTED</span><strong>${Object.keys(state.checkins).filter((k) => k.startsWith(c().id + ":")).length}</strong><span>Recorded submissions</span></div><div class="stat"><span>RECORDED DAYS</span><strong>${entries.length}</strong><span>Unrecorded days are missing data</span></div><div class="stat"><span>PROPOSED THRESHOLD</span><strong>${packageFor().refundThreshold ? packageFor().refundThreshold + "%" : "—"}</strong><span>${packageFor().deposit ? "Premium deposit eligibility; no automatic refund" : "No accountability deposit in this package"}</span></div></div><div class="card"><h2>HRCMS · starting point & direction</h2><p class="small muted">No self-ratings are recorded yet. Missing measurements are shown as —; completion is not a clinical outcome.</p><div class="pillar-grid">${["Health", "Relationships", "Career", "Money", "Spirituality"].map((p, i) => `<div class="pillar"><div class="eyebrow">${p}</div><strong>${c().current[i] ?? "—"}<span class="small"> / 10</span></strong><progress max="10" value="${c().current[i] || 0}" aria-label="${p} self-rating"></progress><span class="small">Baseline ${c().baseline[i] ?? "—"} → ${c().current[i] ?? "—"}</span></div>`).join("")}</div></div><div class="grid"><div class="card"><h2>Actions behind the numbers</h2>${groupedHabits("summary")}</div><div class="card"><h2>What needs a conversation?</h2><p>${esc(clientDifficulty())}</p><div class="note">Missing baseline measurements are not inferred. No automated refund decision is made.</div></div></div><div class="card"><h2>Generated Weekly & Day-30 Reports</h2><div id="generated-reports">Loading server reports…</div></div>`
   );
 }
 function profile() {
@@ -761,12 +763,19 @@ function dateAdd(date, days) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+function packageFor(id = c().id) {
+  return innerCodePackages.get(programme(id));
+}
 function programme(id) {
   return (
     state.programmes[id] || {
+      packageId: "inner-code",
+      packageSnapshot: structuredClone(innerCodePackages.get("inner-code")),
       status: "Not Activated",
       start: day,
       time: "10:00",
+      timeZone: coachingTime.calgary,
+      localTime: "10:00",
       deposit: false,
       balance: false,
       agreed: false,
@@ -794,14 +803,19 @@ function callsFor(id) {
   if (!["Active", "On Hold", "Ended"].includes(p.status)) return [];
   return (
     p.calls ||
-    Array.from({ length: 10 }, (_, i) => ({
+    coachingTime.calls(
       id,
-      number: i + 1,
-      programmeDay: (i + 1) * 3,
-      date: dateAdd(p.start, (i + 1) * 3 - 1),
-      time: p.time || "10:00",
-    }))
-  ).filter((x) => p.status === "Active" || x.date < (p.held || day));
+      p.start,
+      p.localTime || p.time || "10:00",
+      p.timeZone,
+      packageFor(id).calls,
+      packageFor(id).interval,
+    )
+  ).filter(
+    (x) =>
+      p.status === "Active" ||
+      coachingTime.local(coachingTime.utc(x)).date < (p.held || day),
+  );
 }
 function allCalls() {
   return clients
@@ -814,9 +828,7 @@ function callConflict(id, proposed) {
       (y) =>
         !y.nonblocking &&
         (y.id !== id || y.label !== "Coaching Call") &&
-        y.date === x.date &&
-        minutes(x.time) < minutes(y.time) + (y.duration || 20) &&
-        minutes(x.time) + 20 > minutes(y.time),
+        coachingTime.overlaps(x, y, 20, y.duration || 20),
     ),
   );
 }
@@ -844,7 +856,7 @@ function leadsPage() {
       )
       .join(
         "",
-      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
+      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><div class="field"><label for="lead-package">Inner Code Package</label><select id="lead-package" name="packageId">${innerCodePackages.all.map((p) => `<option value="${p.id}" ${p.id === "inner-code" ? "selected" : ""}>${p.name} · CAD ${p.price} · ${p.market}</option>`).join("")}</select></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
   );
 }
 function firstStepsMail(l) {
@@ -866,20 +878,22 @@ function calendarPage() {
     (x) =>
       (!state.calendarClient || x.id === state.calendarClient) &&
       (mode === "Day"
-        ? x.date === anchor
+        ? coachingTime.local(coachingTime.utc(x)).date === anchor
         : mode === "Week"
-          ? x.date >= anchor && x.date <= dateAdd(anchor, 6)
-          : x.date.slice(0, 7) === anchor.slice(0, 7)),
+          ? coachingTime.local(coachingTime.utc(x)).date >= anchor &&
+            coachingTime.local(coachingTime.utc(x)).date <= dateAdd(anchor, 6)
+          : coachingTime.local(coachingTime.utc(x)).date.slice(0, 7) ===
+            anchor.slice(0, 7)),
   );
   return (
     title(
       "Calendar",
-      "Coaching calls and plan deadlines. Times are labelled UTC.",
+      "Every event shows Calgary Time and India Time. Calendar dates follow Calgary.",
     ) +
-    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${x.date} · ${x.time} UTC · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Programme Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this date range. Calls appear after a programme is activated.</div>'}</div><details class="card"><summary>Manage A Client’s Schedule</summary><h2>Programme Controls</h2><p class="small muted">Complete the client’s enrolment steps before activation. Choose one agreed recurring time; overlapping calls are rejected. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
+    `<div class="card"><div class="row"><div class="tabs">${["Day", "Week", "Month"].map((m) => `<button class="btn ${mode === m ? "primary" : ""}" data-calendar-mode="${m}">${m}</button>`).join("")}</div><div class="actions"><input type="date" id="calendar-date" aria-label="Calendar date" value="${anchor}"><select id="calendar-client" aria-label="Filter client"><option value="">All Clients</option>${clients.map((x) => `<option value="${x.id}" ${state.calendarClient === x.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>${mode === "Month" ? monthGrid(anchor, list) : ""}${list.length ? list.map((x) => `<div class="list-item row"><div><h3>${esc(clients.find((c) => c.id === x.id)?.name)}</h3><span class="muted small">${esc(coachingTime.display(x))} · ${x.nonblocking ? "Deadline" : (x.duration || 20) + " minutes"} · ${esc(x.label || "Coaching Call")}${x.programmeDay ? " · Programme Day " + x.programmeDay : ""}</span></div><button class="btn subtle" data-call-client="${x.id}">Prepare Call</button></div>`).join("") : '<div class="empty">No calls in this date range. Calls appear after a programme is activated.</div>'}</div><details class="card"><summary>Manage A Client’s Schedule</summary><h2>Programme Controls</h2><p class="small muted">Complete the client’s enrolment steps before activation. Enter the agreed recurring Calgary time; overlapping calls are rejected. Saving updates future calls, while existing bookings otherwise keep their scheduled moments. Future calls disappear on hold and return shifted by the hold duration on resume.</p>${clients
       .map((x) => {
         const p = programme(x.id);
-        return `<form class="programme-form list-item" data-id="${x.id}"><div class="row"><h3>${esc(x.name)}</h3><span class="badge">${esc(p.status)}</span></div><div class="form-grid"><div class="field"><label>Agreed Programme Start</label><input name="start" type="date" value="${p.start}" required></div><div class="field"><label>Agreed Call Time (UTC)</label><input name="time" type="time" value="${p.time}" required></div></div><div class="actions"><button class="btn primary">${p.status === "Not Activated" ? "Activate Programme" : "Update Future Schedule"}</button>${p.status === "Active" ? `<button class="btn" type="button" data-hold="${x.id}">Put On Hold</button>` : ""}${p.status === "On Hold" ? `<button class="btn" type="button" data-resume="${x.id}">Resume Programme</button>` : ""}${["Active", "On Hold"].includes(p.status) ? `<button class="btn" type="button" data-end="${x.id}">End Programme</button>` : ""}</div></form>`;
+        return `<form class="programme-form list-item" data-id="${x.id}"><div class="row"><h3>${esc(x.name)}</h3><span class="badge">${esc(p.status)}</span></div><div class="form-grid"><div class="field"><label>Agreed Programme Start</label><input name="start" type="date" value="${p.start}" required></div><div class="field">${packageFor(x.id).calls ? `<label>Agreed Call Time (Calgary)</label><input name="time" type="time" value="${calgaryProgrammeTime(p)}" required>` : `<span class="muted">Self-Guided · No private calls</span><input name="time" type="hidden" value="10:00">`}</div></div><div class="actions"><button class="btn primary">${p.status === "Not Activated" ? "Activate Programme" : "Update Future Schedule"}</button>${p.status === "Active" ? `<button class="btn" type="button" data-hold="${x.id}">Put On Hold</button>` : ""}${p.status === "On Hold" ? `<button class="btn" type="button" data-resume="${x.id}">Resume Programme</button>` : ""}${["Active", "On Hold"].includes(p.status) ? `<button class="btn" type="button" data-end="${x.id}">End Programme</button>` : ""}</div></form>`;
       })
       .join("")}</details>`
   );
@@ -894,10 +908,10 @@ function monthGrid(anchor, calls) {
     (_, i) => {
       const d = anchor.slice(0, 8) + String(i + 1).padStart(2, "0");
       return `<div class="calendar-cell"><b>${i + 1}</b>${calls
-        .filter((x) => x.date === d)
+        .filter((x) => coachingTime.local(coachingTime.utc(x)).date === d)
         .map(
           (x) =>
-            `<span>${esc(clients.find((c) => c.id === x.id).name.split(" ")[0])} ${x.time}</span>`,
+            `<span>${esc(clients.find((c) => c.id === x.id).name.split(" ")[0])} ${esc(coachingTime.display(x))}</span>`,
         )
         .join("")}</div>`;
     },
@@ -966,14 +980,14 @@ function resources() {
 function onboardingPage() {
   const coach = state.mode === "coach",
     entry = state.intakes[c().id] || {};
-  if (!programme(c().id).deposit)
+  if (!innerCodePackages.questionnaireReady(programme(c().id)))
     return (
       title(
         "Onboarding",
-        "Questionnaire access opens after deposit confirmation.",
+        "Questionnaire access opens after the required package payment is verified.",
       ) +
       (coach ? selector() : "") +
-      '<div class="note">Deposit has not been confirmed. Use Leads & Enrollment to record the verified payment.</div>'
+      '<div class="note">The required package payment has not been verified yet. Record it in the client overview.</div>'
     );
   return (
     title(
@@ -1030,6 +1044,19 @@ function bindWorkflow() {
       phone: f.get("phone").trim(),
       source: f.get("source"),
       created: new Date().toISOString(),
+    };
+    const cfg = innerCodePackages.get(f.get("packageId") || "inner-code");
+    state.programmes[l.id] = {
+      packageId: cfg.id,
+      packageSnapshot: structuredClone(cfg),
+      status: "Not Activated",
+      start: day,
+      time: "10:00",
+      timeZone: coachingTime.calgary,
+      localTime: "10:00",
+      deposit: false,
+      balance: false,
+      agreed: false,
     };
     state.leads.push(l);
     registerProfile(l);
@@ -1109,9 +1136,8 @@ function bindWorkflow() {
           return;
         }
         if (
-          !p.deposit ||
-          !p.balance ||
-          !p.agreed ||
+          !innerCodePackages.paid(p) ||
+          (packageFor(id).walkthrough && !p.agreed) ||
           !state.intakes[id]?.submitted
         ) {
           toast(
@@ -1125,18 +1151,53 @@ function bindWorkflow() {
           );
           return;
         }
-        p.start = f.get("start");
-        p.time = f.get("time");
+        const start = f.get("start"),
+          localTime = f.get("time");
+        let calls;
+        try {
+          calls =
+            p.status === "Active"
+              ? (
+                  p.calls ||
+                  coachingTime.calls(
+                    id,
+                    p.start,
+                    p.localTime || p.time,
+                    p.timeZone,
+                    packageFor(id).calls,
+                    packageFor(id).interval,
+                  )
+                ).map((call) => {
+                  const local = coachingTime.local(coachingTime.utc(call));
+                  return local.date >= day
+                    ? {
+                        ...call,
+                        ...coachingTime.fromLocal(local.date, localTime),
+                        localDate: local.date,
+                        localTime,
+                        timeZone: coachingTime.calgary,
+                      }
+                    : call;
+                })
+              : coachingTime.calls(
+                  id,
+                  start,
+                  localTime,
+                  coachingTime.calgary,
+                  packageFor(id).calls,
+                  packageFor(id).interval,
+                );
+        } catch (error) {
+          toast(error.message);
+          return;
+        }
+        p.start = start;
+        p.localTime = localTime;
+        p.timeZone = coachingTime.calgary;
+        p.time =
+          calls[0]?.time || coachingTime.fromLocal(start, localTime).time;
         p.status = "Active";
-        p.calls = p.calls
-          ? p.calls.map((x) => (x.date >= day ? { ...x, time: p.time } : x))
-          : Array.from({ length: 10 }, (_, i) => ({
-              id,
-              number: i + 1,
-              programmeDay: (i + 1) * 3,
-              date: dateAdd(p.start, (i + 1) * 3 - 1),
-              time: p.time,
-            }));
+        p.calls = calls;
         state.programmes[id] = p;
         if (callConflict(id)) {
           state.programmes[id] = old;
@@ -1147,9 +1208,7 @@ function bindWorkflow() {
         }
         save();
         render();
-        toast(
-          "Programme active. Ten 20-minute calls generated without duplicates.",
-        );
+        toast("Programme active. The package call schedule is ready.");
       }),
   );
   document.querySelectorAll("[data-hold]").forEach(
@@ -1176,16 +1235,25 @@ function bindWorkflow() {
         );
         const scheduled =
           p.calls ||
-          Array.from({ length: 10 }, (_, i) => ({
+          coachingTime.calls(
             id,
-            number: i + 1,
-            programmeDay: (i + 1) * 3,
-            date: dateAdd(p.start, (i + 1) * 3 - 1),
-            time: p.time,
-          }));
-        p.calls = scheduled.map((x) =>
-          x.date >= p.held ? { ...x, date: dateAdd(x.date, shift) } : x,
-        );
+            p.start,
+            p.localTime || p.time,
+            p.timeZone,
+            packageFor(id).calls,
+            packageFor(id).interval,
+          );
+        try {
+          p.calls = scheduled.map((x) =>
+            coachingTime.local(coachingTime.utc(x)).date >= p.held
+              ? coachingTime.shiftEvent(x, shift)
+              : x,
+          );
+        } catch (error) {
+          state.programmes[id] = old;
+          toast(error.message);
+          return;
+        }
         p.start = dateAdd(p.start, shift);
         p.status = "Active";
         delete p.held;
@@ -1350,151 +1418,6 @@ function workflow(id) {
   state.workflow ??= {};
   return (state.workflow[id] ??= {});
 }
-function enqueue(id, type, subject, body, due = day) {
-  state.outbox ??= {};
-  const key = id + ":" + type;
-  if (!state.outbox[key])
-    state.outbox[key] = {
-      id: key,
-      client: id,
-      type,
-      subject,
-      body,
-      due,
-      status: "Draft",
-      created: new Date().toISOString(),
-    };
-}
-function syncWork() {
-  state.workflow ??= {};
-  state.outbox ??= {};
-  for (const x of clients) {
-    const w = workflow(x.id),
-      p = programme(x.id),
-      l = state.leads.find((l) => l.id === x.id),
-      intake = state.intakes[x.id];
-    if (l)
-      enqueue(
-        x.id,
-        "first",
-        "Your First Steps",
-        "Review your one-page programme agreement and payment terms before paying the $150 deposit. After verification, complete your onboarding questionnaire. Total programme price: $500, currency and final terms to be confirmed. Payment destination must be supplied by Ritu.",
-      );
-    if (p.deposit) {
-      w.depositDate ??= day;
-      if (!intake?.submitted)
-        enqueue(
-          x.id,
-          "questionnaire-reminder",
-          "Reminder — Complete Your Onboarding",
-          "Your questionnaire is pending. Complete it before plan preparation can begin.",
-          dateAdd(w.depositDate, 2),
-        );
-    }
-    if (p.deposit)
-      enqueue(
-        x.id,
-        "deposit",
-        "Deposit Confirmed — Complete Your Onboarding",
-        "Your $150 deposit has been recorded by your coach. Receipt: deposit $150, balance $350. Complete your private questionnaire when your coach provides the secure link. After submission, allow three business days (Saturday and Sunday excluded) for plan preparation.",
-      );
-    if (intake?.submitted) {
-      w.planDue ??= addBusinessDays(intake.submitted.slice(0, 10), 3);
-      enqueue(
-        x.id,
-        "answers",
-        "Your Onboarding Answers Have Been Received",
-        `Your coach is preparing your personalised plan. Expected ready date: ${w.planDue}. A walkthrough invitation follows once the plan is ready.`,
-      );
-    }
-    if (w.planReady && w.slots?.length)
-      enqueue(
-        x.id,
-        "slots",
-        "Your Plan Is Ready — Book Your Walkthrough",
-        "Your plan is ready for discussion, not attached to this email. Reply to this email with your preferred offered time. The walkthrough lasts 30 minutes.",
-      );
-    if (w.slots?.length && !w.booking)
-      enqueue(
-        x.id,
-        "slot-reminder",
-        "Reminder — Choose Your Walkthrough Slot",
-        "Reply to the email with your chosen time; Rituparna will confirm it.",
-        dateAdd(w.slotsAt || day, 2),
-      );
-    if (w.booking)
-      enqueue(
-        x.id,
-        "booking",
-        "Your Walkthrough Is Booked",
-        `Your 30-minute walkthrough is booked for ${w.booking.date} at ${w.booking.time} UTC. We will discuss your plan and commitments.`,
-      );
-    if (w.walkthroughDone && p.agreed)
-      enqueue(
-        x.id,
-        "balance",
-        "Confirm Your Start — Remaining Payment",
-        "Your walkthrough and plan agreement are recorded. Remaining balance: $350. After verified payment, your programme begins the following day. Payment destination, currency and final invoice details require coach review.",
-      );
-    if (p.balance) {
-      w.balanceDate ??= day;
-      const start = dateAdd(w.balanceDate, 1);
-      if (
-        w.walkthroughDone &&
-        p.deposit &&
-        p.agreed &&
-        intake?.submitted &&
-        p.status === "Not Activated"
-      ) {
-        const proposal = { ...p, status: "Active", start };
-        state.programmes[x.id] = proposal;
-        if (callConflict(x.id)) {
-          state.programmes[x.id] = p;
-          w.activationIssue =
-            "Call conflict: select another recurring time in Calendar.";
-        } else {
-          w.autoActivated = true;
-          delete w.activationIssue;
-        }
-      }
-      enqueue(
-        x.id,
-        "paid",
-        "Balance Confirmed — Your Programme Starts Tomorrow",
-        `Payment confirmation: balance $350; total received $500. Programme start: ${start}, UTC. The production account setup link will let you set your own password; no password is emailed.`,
-      );
-      enqueue(
-        x.id,
-        "welcome",
-        "Welcome — Your Programme Starts Today",
-        `Your start date is ${start}. Visit My Day, My Habits, Daily Practices, Check-Ins, Journals and My Resources. Production login and private links are not connected.`,
-        start,
-      );
-    }
-  }
-}
-function reconcileMessages() {
-  for (const e of Object.values(state.outbox || {})) {
-    const w = workflow(e.client),
-      p = programme(e.client);
-    if (["Sent", "Failed"].includes(e.status)) continue;
-    if (
-      (e.type === "questionnaire-reminder" &&
-        state.intakes[e.client]?.submitted) ||
-      (e.type === "slot-reminder" && w.booking)
-    ) {
-      e.status = "Cancelled";
-      continue;
-    }
-    if (
-      ["On Hold", "Ended"].includes(p.status) &&
-      e.due >= day &&
-      ["welcome", "slot-reminder", "questionnaire-reminder"].includes(e.type)
-    ) {
-      e.status = p.status === "Ended" ? "Cancelled" : "Paused";
-    } else if (e.status === "Paused") e.status = "Draft";
-  }
-}
 function taskList() {
   const tasks = [];
   for (const x of clients) {
@@ -1502,6 +1425,7 @@ function taskList() {
     const id = x.id,
       w = workflow(id),
       p = programme(id),
+      cfg = packageFor(id),
       intake = state.intakes[id],
       l = state.leads.find((l) => l.id === id);
     const add = (kind, label, due, view, waiting = false) =>
@@ -1520,8 +1444,15 @@ function taskList() {
         (l.created || day).slice(0, 10),
         "emails",
       );
-    if (!p.deposit) {
-      if (l) add("deposit", "Waiting For $150 Deposit", day, "leads", true);
+    if (!innerCodePackages.questionnaireReady(p)) {
+      if (l)
+        add(
+          "payment",
+          `Waiting For CAD ${cfg.deposit || cfg.price} Payment`,
+          day,
+          "clienthub",
+          true,
+        );
       continue;
     }
     if (!intake?.submitted) {
@@ -1541,6 +1472,11 @@ function taskList() {
         w.planDue || addBusinessDays(intake.submitted.slice(0, 10), 3),
         "habits",
       );
+      continue;
+    }
+    if (!cfg.walkthrough) {
+      if (p.status !== "Active")
+        add("activation", "Check Programme Activation", day, "calendar");
       continue;
     }
     if (!w.slots?.length) {
@@ -1615,11 +1551,15 @@ function workPage() {
     later = tasks.filter((t) => !t.waiting && t.due > day),
     waiting = tasks.filter((t) => t.waiting);
   const events = calendarEvents()
-    .filter((e) => e.date >= day && !clients.find((c) => c.id === e.id)?.isTest)
+    .filter(
+      (e) =>
+        coachingTime.local(coachingTime.utc(e)).date >= day &&
+        !clients.find((c) => c.id === e.id)?.isTest,
+    )
     .slice(0, 5);
   return (
     title("Today’s Work", "Your next steps, one client at a time.") +
-    `<div class="grid"><section>${urgent.length ? taskGroup("Needs Your Attention", urgent) : '<div class="card"><h2>You’re Up To Date</h2><p class="muted">No actions due right now.</p><button class="btn" data-view="clients">Open Clients</button></div>'}${later.length ? taskGroup("Coming Up", later) : ""}</section><aside>${waiting.length ? taskGroup("Waiting For A Reply", waiting) : ""}${events.length ? `<div class="card"><h2>Upcoming Calls & Work</h2>${events.map((e) => `<div class="list-item"><strong>${esc(clients.find((x) => x.id === e.id)?.name)}</strong><p class="small muted">${e.date} · ${e.time} UTC · ${esc(e.label)}</p><button class="btn subtle" data-client="${e.id}">Open Client</button></div>`).join("")}</div>` : ""}</aside></div>`
+    `<div class="grid"><section>${urgent.length ? taskGroup("Needs Your Attention", urgent) : '<div class="card"><h2>You’re Up To Date</h2><p class="muted">No actions due right now.</p><button class="btn" data-view="clients">Open Clients</button></div>'}${later.length ? taskGroup("Coming Up", later) : ""}</section><aside>${waiting.length ? taskGroup("Waiting For A Reply", waiting) : ""}${events.length ? `<div class="card"><h2>Upcoming Calls & Work</h2>${events.map((e) => `<div class="list-item"><strong>${esc(clients.find((x) => x.id === e.id)?.name)}</strong><p class="small muted">${esc(coachingTime.display(e))} · ${esc(e.label)}</p><button class="btn subtle" data-client="${e.id}">Open Client</button></div>`).join("")}</div>` : ""}</aside></div>`
   );
 }
 function taskGroup(title, items) {
@@ -1629,7 +1569,7 @@ function workflowControls() {
   if (!c().id) return "<p>No clients yet. Register a lead to begin.</p>";
   const w = workflow(c().id),
     intake = state.intakes[c().id];
-  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · Three business days · Weekends excluded</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || addBusinessDays(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (UTC)</label><input type="date" name="date" value="${w.workBlock?.date || day}" required><input type="time" name="time" value="${w.workBlock?.time || "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button><form id="offer-slots-form"><h3>Offer Four Slots</h3>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i]?.date || dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i]?.time || "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>${w.booking ? `<div class="note">Walkthrough: ${w.booking.date} · ${w.booking.time} UTC · 30 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Walkthrough Completed ✓" : "Complete Walkthrough"}</button>` : ""}`;
+  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · Three business days · Weekends excluded</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || addBusinessDays(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (Calgary Time)</label><input type="date" name="date" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).date : day}" required><input type="time" name="time" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).time : "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button>${packageFor().walkthrough ? `<form id="offer-slots-form"><h3>Offer Four Slots</h3><p class="small muted">Enter Calgary times. Both Calgary and India times will be shown in the invitation.</p>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).date : dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).time : "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>` : ""}${w.booking && packageFor().walkthrough ? `<div class="note">Walkthrough: ${esc(coachingTime.display(w.booking))} · 30 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Walkthrough Completed ✓" : "Complete Walkthrough"}</button>` : ""}`;
 }
 function bookingPage() {
   const w = workflow(c().id);
@@ -1638,7 +1578,7 @@ function bookingPage() {
       "Walkthrough Booking",
       "Choose one coach-offered slot for a 30-minute discussion. Your plan is not emailed.",
     ) +
-    `<div class="card">${w.booking ? `<h2>Booking Confirmed</h2><p>${w.booking.date} · ${w.booking.time} UTC · 30 minutes</p>` : w.slots?.length ? w.slots.map((slot, i) => `<div class="list-item row"><span>${slot.date} · ${slot.time} UTC</span><button class="btn primary" data-book-slot="${i}" ${slotAvailable(c().id, slot.date, slot.time, 30) ? "" : "disabled"}>Choose Slot</button></div>`).join("") : "<p>Your coach will offer four slots when your plan is ready.</p>"}</div>`
+    `<div class="card">${w.booking ? `<h2>Booking Confirmed</h2><p>${esc(coachingTime.display(w.booking))} · 30 minutes</p>` : w.slots?.length ? w.slots.map((slot, i) => `<div class="list-item row"><span>${esc(coachingTime.display(slot))}</span><button class="btn primary" data-book-slot="${i}" ${slotAvailable(c().id, slot.date, slot.time, 30) ? "" : "disabled"}>Choose Slot</button></div>`).join("") : "<p>Your coach will offer four slots when your plan is ready.</p>"}</div>`
   );
 }
 function calendarEvents() {
@@ -1651,8 +1591,7 @@ function calendarEvents() {
           ? [
               {
                 id: x.id,
-                date: w.planDue,
-                time: "23:59",
+                ...coachingTime.fromLocal(w.planDue, "23:59"),
                 duration: 0,
                 label: "Plan Deadline",
                 nonblocking: true,
@@ -1680,10 +1619,8 @@ function slotAvailable(id, date, time, duration, ignore = "") {
   return !calendarEvents().some(
     (e) =>
       !e.nonblocking &&
-      e.date === date &&
       !(e.id === id && e.label === ignore) &&
-      minutes(time) < minutes(e.time) + (e.duration || 20) &&
-      minutes(time) + duration > minutes(e.time),
+      coachingTime.overlaps({ date, time }, e, duration, e.duration || 20),
   );
 }
 function bindTasks() {
@@ -1703,16 +1640,29 @@ function bindTasks() {
   $("#work-block-form")?.addEventListener("submit", (e) => {
     e.preventDefault();
     const f = new FormData(e.target),
-      date = f.get("date"),
-      time = f.get("time"),
       duration = Number(f.get("duration"));
+    let event;
+    try {
+      event = coachingTime.fromLocal(f.get("date"), f.get("time"));
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
+    const { date, time } = event;
     if (
       !slotAvailable(c().id, date, time, duration, "Prepare Personalised Plan")
     ) {
       toast("That work block overlaps another event. Choose another slot.");
       return;
     }
-    workflow(c().id).workBlock = { date, time, duration };
+    workflow(c().id).workBlock = {
+      date,
+      time,
+      duration,
+      timeZone: coachingTime.calgary,
+      localDate: f.get("date"),
+      localTime: f.get("time"),
+    };
     save();
     render();
     toast("Plan preparation block added to the internal calendar.");
@@ -1726,16 +1676,24 @@ function bindTasks() {
   $("#offer-slots-form")?.addEventListener("submit", (e) => {
     e.preventDefault();
     if (!workflow(c().id).planReady) return;
-    const f = new FormData(e.target),
+    const f = new FormData(e.target);
+    let slots;
+    try {
       slots = Array.from({ length: 4 }, (_, i) => ({
-        date: f.get("date" + i),
-        time: f.get("time" + i),
+        ...coachingTime.fromLocal(f.get("date" + i), f.get("time" + i)),
+        localDate: f.get("date" + i),
+        localTime: f.get("time" + i),
+        timeZone: coachingTime.calgary,
       }));
+    } catch (error) {
+      toast(error.message);
+      return;
+    }
     if (
       new Set(slots.map((s) => s.date + s.time)).size !== 4 ||
       slots.some(
         (s) =>
-          s.date < day ||
+          coachingTime.local(coachingTime.utc(s)).date < day ||
           !slotAvailable(c().id, s.date, s.time, 30, "Plan Walkthrough"),
       )
     ) {
@@ -1761,7 +1719,7 @@ function bindTasks() {
         if (
           w.booking ||
           !slot ||
-          slot.date < day ||
+          coachingTime.local(coachingTime.utc(slot)).date < day ||
           !slotAvailable(c().id, slot.date, slot.time, 30)
         ) {
           toast("This slot is no longer available.");

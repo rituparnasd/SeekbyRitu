@@ -1,3 +1,5 @@
+import "../public/calendar.js";
+import "../public/packages.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -275,6 +277,103 @@ test("private onboarding never grants CRM login before full verified payment", a
       body: { email: "new@example.test", password: "new-client-password-123" },
     });
     assert.equal(client.status, 200);
+    for (const packageId of ["inner-code-self-guided", "inner-code-guided"]) {
+      const cfg = globalThis.innerCodePackages.get(packageId),
+        id = packageId;
+      snapshot = (await request("/api/state", owner)).data;
+      snapshot.state.leads.push({
+        id,
+        first: "India",
+        last: cfg.name,
+        email: id + "@example.test",
+      });
+      snapshot.state.programmes[id] = {
+        packageId,
+        status: "Not Activated",
+        deposit: false,
+        balance: false,
+        timeZone: globalThis.coachingTime.calgary,
+        localTime: "14:00",
+        time: "21:00",
+      };
+      await save();
+      assert.equal(
+        (
+          await request("/api/invite", {
+            ...owner,
+            method: "POST",
+            body: { id },
+          })
+        ).status,
+        403,
+      );
+      const link = await request("/api/onboarding-link", {
+          ...owner,
+          method: "POST",
+          body: { id },
+        }),
+        token = new URL(link.data.link).searchParams.get("onboarding");
+      snapshot.state.programmes[id].balance = true;
+      await save();
+      const limited = await request("/api/onboarding-access", { token });
+      assert.equal(limited.status, 200);
+      assert.equal(limited.data.deposit, true);
+      assert.equal(limited.data.package.price, cfg.price);
+      assert.equal(
+        (
+          await request("/api/onboarding-access", {
+            method: "POST",
+            token,
+            body: {
+              action: "intake",
+              answers: Array(30).fill("Completed"),
+              submit: true,
+            },
+          })
+        ).status,
+        200,
+      );
+      snapshot = (await request("/api/state", owner)).data;
+      snapshot.state.workflow[id].planReady = new Date().toISOString();
+      await save();
+      assert.equal(snapshot.state.programmes[id].calls.length, cfg.calls);
+      assert.equal(snapshot.state.programmes[id].status, "Active");
+      const invitation = await request("/api/invite", {
+        ...owner,
+        method: "POST",
+        body: { id },
+      });
+      assert.equal(invitation.status, 200);
+      assert.equal(
+        (
+          await request("/api/accept-invite", {
+            method: "POST",
+            body: {
+              token: new URL(invitation.data.link).searchParams.get("invite"),
+              password: "india-client-password-123",
+            },
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (
+          await request("/api/login", {
+            method: "POST",
+            body: {
+              email: id + "@example.test",
+              password: "india-client-password-123",
+            },
+          })
+        ).status,
+        200,
+      );
+      assert(
+        !Object.values(snapshot.state.outbox)
+          .filter((e) => e.client === id)
+          .some((e) => /CAD (150|350|500)/.test(e.body)),
+      );
+    }
   } finally {
     child.kill();
     if (child.exitCode === null)

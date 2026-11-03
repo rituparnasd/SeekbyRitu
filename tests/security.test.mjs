@@ -1,3 +1,4 @@
+import "../public/calendar.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -97,6 +98,11 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     });
     assert.equal(login.status, 200);
     const coach = { cookie: login.cookie, csrf: login.data.csrf };
+    const runtime = await request("/api/verification", coach);
+    assert.equal(runtime.status, 200);
+    assert.match(runtime.data.checks.Storage, /Verified/);
+    assert.match(runtime.data.times, /Calgary Time/);
+    assert.match(runtime.data.times, /India Time/);
     const connect = await request("/api/gmail/connect", {
       ...coach,
       method: "POST",
@@ -147,7 +153,7 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
         deposit: true,
         balance: true,
         status: "Active",
-        start: new Date().toISOString().slice(0, 10),
+        start: globalThis.coachingTime.today(),
         time: "10:00",
       };
       s.customPlans[l.id] = [
@@ -233,9 +239,9 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       403,
     );
     const invalidHabits = structuredClone(data.state);
-    invalidHabits.records[
-      "client-one:" + new Date().toISOString().slice(0, 10)
-    ] = { 999: "done" };
+    invalidHabits.records["client-one:" + globalThis.coachingTime.today()] = {
+      999: "done",
+    };
     assert.equal(
       (
         await request("/api/state", {
@@ -297,7 +303,14 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
     );
     const me = await request("/api/me", client);
     assert.equal(me.data.role, "client");
+    assert.equal(
+      JSON.stringify((await request("/api/terms", client)).data).includes(
+        "342 15 Avenue",
+      ),
+      false,
+    );
     assert.equal((await request("/api/gmail/status", client)).status, 403);
+    assert.equal((await request("/api/verification", client)).status, 403);
     assert.equal((await request("/api/billing", client)).status, 403);
     assert.equal(
       (await request("/api/billing/pdf?id=anything", client)).status,
@@ -404,7 +417,7 @@ test("server-backed access, MFA, invitations, client isolation, documents and pe
       type: "deposit",
       subject: "Test",
       body: "No live delivery",
-      due: new Date().toISOString().slice(0, 10),
+      due: globalThis.coachingTime.today(),
       status: "Draft",
     };
     assert.equal(

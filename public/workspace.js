@@ -33,34 +33,52 @@ function groupedHabits(mode) {
 function clientStage(id) {
   const p = programme(id),
     w = workflow(id),
+    cfg = packageFor(id),
     first = state.outbox[id + ":first"];
   if (p.status === "On Hold") return { label: "On Hold", view: "calendar" };
   if (p.status === "Ended")
     return { label: "Programme Ended", view: "reports" };
-  if (p.balance && p.status !== "Active")
-    return {
-      label:
-        w.activationIssue || "Payment Complete · Check Programme Activation",
-      view: "calendar",
-    };
-  if (p.balance)
+  if (p.status === "Active")
     return {
       label: p.start > day ? "Starting Soon" : "Programme Active",
       view: "reports",
     };
-  if (!first?.sentAt && !clients.find((x) => x.id === id)?.isTest)
-    return { label: "Send First Steps", email: id + ":first" };
-  if (!p.deposit)
+  if (
+    !first?.sentAt &&
+    !clients.find((x) => x.id === id)?.isTest &&
+    !p.deposit &&
+    !p.balance
+  )
+    return { label: "Send First Steps · " + cfg.name, email: id + ":first" };
+  if (!cfg.deposit && !p.balance)
+    return {
+      label: `Waiting For CAD ${cfg.price} Payment`,
+      payment: "balance",
+    };
+  if (cfg.deposit && !p.deposit)
     return { label: "Waiting For CAD 150 Deposit", payment: "deposit" };
   if (!state.intakes[id]?.submitted)
-    return { label: "Waiting For Questionnaire", email: id + ":deposit" };
+    return {
+      label: "Waiting For Questionnaire",
+      email: id + (cfg.deposit ? ":deposit" : ":paid"),
+    };
   if (!w.planReady)
     return { label: "Prepare Personalised Plan", view: "habits" };
+  if (!cfg.walkthrough)
+    return {
+      label: w.activationIssue || "Preparing Programme Activation",
+      view: "calendar",
+    };
   if (!w.booking) return { label: "Arrange Plan Walkthrough", booking: true };
   if (!w.walkthroughDone)
     return { label: "Complete Plan Walkthrough", walkthrough: true };
   if (!p.agreed) return { label: "Record Plan Approval", payment: "agreed" };
-  return { label: "Waiting For CAD 350 Balance", payment: "balance" };
+  if (!p.balance)
+    return { label: "Waiting For CAD 350 Balance", payment: "balance" };
+  return {
+    label: w.activationIssue || "Payment Complete · Check Programme Activation",
+    view: "calendar",
+  };
 }
 const clientViews = [
   "clienthub",
@@ -95,7 +113,8 @@ function clientHub() {
   const x = c(),
     p = programme(x.id),
     w = workflow(x.id),
-    next = clientStage(x.id);
+    next = clientStage(x.id),
+    cfg = packageFor(x.id);
   const main = next.email
     ? `<button class="btn primary" data-client-email="${next.email}">Review Email</button>`
     : next.payment
@@ -115,10 +134,10 @@ function clientHub() {
   return (
     title(
       x.name,
-      "Everything for this client, together.",
+      `Everything for this client · ${cfg.name} · CAD ${cfg.price}`,
       `<button class="btn" data-preview="${x.id}">Preview Client View</button>`,
     ) +
-    `<div class="hero"><div class="eyebrow">Next Step</div><h2>${next.label}</h2>${main}</div><ol class="journey-steps">${["Deposit", "Questionnaire", "Plan", "Walkthrough", "Balance"].map((l, i) => `<li class="${doneSteps[i] ? "step-done" : ""}">${doneSteps[i] ? "✓ " : ""}${l}</li>`).join("")}</ol><div id="client-email-panel"></div><div id="payment-panel"></div><div class="grid"><section><div class="card"><h2>Client Details</h2><p>${esc(state.leads.find((l) => l.id === x.id)?.email || "")}</p><div class="actions"><button class="btn" data-view="profile">Profile & Original Answers</button><button class="btn" data-view="onboarding">Questionnaire</button><button class="btn" id="copy-onboarding-link">Copy Private Onboarding Link</button></div></div><div class="card"><h2>Payments & Documents</h2><p class="small muted">One Service Agreement defines the service. Invoices request payment. Receipts confirm verified payments.</p><div class="actions"><button class="btn primary" data-client-billing="${x.id}">Open Billing For This Client</button></div><details><summary>Inner Code Payment History</summary><p>Deposit: ${p.deposit ? "CAD 150 verified" : "Not received"} · Balance: ${p.balance ? "CAD 350 verified" : "Not received"}</p><div class="actions">${p.deposit ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=deposit">Deposit Receipt</a>` : ""}${p.balance ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=balance">Balance Receipt</a>` : ""}</div></details></div></section><aside><details class="card" id="booking-controls" ${next.booking || next.walkthrough ? "open" : ""}><summary>Plan Deadline & Walkthrough</summary>${workflowControls()}${w.slots?.length && !w.booking ? `<form id="coach-booking-form"><label for="coach-slot">Client’s Chosen Slot</label><select id="coach-slot" name="slot">${w.slots.map((s, i) => `<option value="${i}">${s.date} · ${s.time} UTC</option>`).join("")}</select><button class="btn">Confirm Booking</button></form>` : ""}</details><details class="card"><summary>All Emails For This Client</summary>${
+    `<div class="hero"><div class="eyebrow">Next Step</div><h2>${next.label}</h2>${main}</div><ol class="journey-steps">${(cfg.walkthrough ? ["Deposit", "Questionnaire", "Plan", "Walkthrough", "Balance"] : ["Payment", "Questionnaire", "Plan", "Activation"]).map((l, i) => `<li class="${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "step-done" : ""}">${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "✓ " : ""}${l}</li>`).join("")}</ol><div id="client-email-panel"></div><div id="payment-panel"></div><div class="grid"><section><div class="card"><h2>Client Details</h2><p>${esc(state.leads.find((l) => l.id === x.id)?.email || "")}</p><div class="actions"><button class="btn" data-view="profile">Profile & Original Answers</button><button class="btn" data-view="onboarding">Questionnaire</button><button class="btn" id="copy-onboarding-link">Copy Private Onboarding Link</button></div></div><div class="card"><h2>Payments & Documents</h2><p class="small muted">One Service Agreement defines the service. Invoices request payment. Receipts confirm verified payments.</p><div class="actions"><button class="btn primary" data-client-billing="${x.id}">Open Billing For This Client</button></div><details><summary>Inner Code Payment History</summary><p>${cfg.deposit ? `Deposit: ${p.deposit ? "CAD 150 verified" : "Not received"} · ` : ""}Payment: ${p.balance ? `CAD ${cfg.balance} verified` : "Not received"}</p><div class="actions">${p.deposit ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=deposit">Deposit Receipt</a>` : ""}${p.balance ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=balance">Balance Receipt</a>` : ""}</div></details></div></section><aside><details class="card" id="booking-controls" ${next.booking || next.walkthrough ? "open" : ""}><summary>Plan Deadline & Walkthrough</summary>${workflowControls()}${w.slots?.length && !w.booking ? `<form id="coach-booking-form"><label for="coach-slot">Client’s Chosen Slot</label><select id="coach-slot" name="slot">${w.slots.map((s, i) => `<option value="${i}">${esc(coachingTime.display(s))}</option>`).join("")}</select><button class="btn">Confirm Booking</button></form>` : ""}</details><details class="card"><summary>All Emails For This Client</summary>${
       Object.values(state.outbox)
         .filter((e) => e.client === x.id)
         .map(
@@ -132,10 +151,31 @@ function clientHub() {
 function adminPage() {
   return (
     title("Admin", "Occasional settings. Your daily work stays on Today.") +
-    `<div class="card"><div class="list-item row"><div><h2>Email Connection & History</h2><p class="muted">Connect Gmail, review delivery and resolve sending issues.</p></div><button class="btn" data-view="emails">Open Email Center</button></div><div class="list-item row"><div><h2>Sample Client Preview</h2><p class="muted">An isolated fictional profile for checking the client experience.</p></div><button class="btn" id="create-test-client">Preview Sample Client</button></div><div class="list-item row"><div><h2>Data Backup</h2><p class="muted">Download an encrypted copy for secure storage.</p></div><a class="btn" href="/api/export">Download Backup</a></div><p class="small muted">Your CRM calendar schedules coaching calls internally. Google Calendar sync is not connected. Calendar times are currently UTC.</p></div>`
+    `<div class="card"><div class="list-item"><h2>Live Workspace Check</h2><p class="muted">Check storage and setup from this running CRM. This does not send email or collect payment.</p><button class="btn" id="run-live-check">Run Live Check</button><div id="live-check-result" aria-live="polite"></div></div><div class="list-item row"><div><h2>Email Connection & History</h2><p class="muted">Connect Gmail, review delivery and resolve sending issues.</p></div><button class="btn" data-view="emails">Open Email Center</button></div><div class="list-item row"><div><h2>Sample Client Preview</h2><p class="muted">An isolated fictional profile for checking the client experience.</p></div><button class="btn" id="create-test-client">Preview Sample Client</button></div><div class="list-item row"><div><h2>Data Backup</h2><p class="muted">Download an encrypted copy for secure storage.</p></div><a class="btn" href="/api/export">Download Backup</a></div><p class="small muted">Your CRM calendar schedules coaching calls internally. Google Calendar sync is not connected. Events show Calgary Time and India Time; new time entries use Calgary Time.</p></div>`
   );
 }
 function bindSimpleWorkspace() {
+  $("#run-live-check")?.addEventListener("click", async (e) => {
+    e.target.disabled = true;
+    const result = $("#live-check-result");
+    result.textContent = "Checking this running workspace…";
+    try {
+      const r = await api("/api/verification");
+      result.innerHTML = `<ul>${Object.entries(r.checks)
+        .map(
+          ([name, check]) =>
+            `<li><strong>${esc(name)}:</strong> ${esc(check)}</li>`,
+        )
+        .join(
+          "",
+        )}</ul><p class="small muted">Checked ${esc(r.checkedAt)}. ${esc(r.times)}. ${esc(r.limitations)}</p>`;
+    } catch (error) {
+      result.textContent = error.message;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
   $("#copy-onboarding-link")?.addEventListener("click", async () => {
     try {
       await saveChain;
@@ -200,7 +240,7 @@ function bindSimpleWorkspace() {
         if (p[kind]) return toast("Already recorded.");
         const root = $("#payment-panel");
         if (!root) return;
-        root.innerHTML = `<form id="verify-payment-form" class="card"><h2>${kind === "agreed" ? "Record Plan Approval" : "Record Verified " + (kind === "deposit" ? "CAD 150 Deposit" : "CAD 350 Balance")}</h2><p>Record this only after ${kind === "agreed" ? "the client has approved the discussed plan." : "you have checked that the payment reached your account."}</p>${kind !== "agreed" ? '<label>Payment Date</label><input name="date" type="date" required value="' + day + '"><label>Payment Method</label><input name="method" required maxlength="100"><label>Transaction Reference</label><input name="reference" required maxlength="200">' : ""}<label><input type="checkbox" required> I have verified this.</label><button class="btn primary">Confirm Record</button></form>`;
+        root.innerHTML = `<form id="verify-payment-form" class="card"><h2>${kind === "agreed" ? "Record Plan Approval" : "Record Verified " + (kind === "deposit" ? `CAD ${packageFor(id).deposit} Deposit` : `CAD ${packageFor(id).balance} ${packageFor(id).deposit ? "Balance" : "Payment"}`)}</h2><p>Record this only after ${kind === "agreed" ? "the client has approved the discussed plan." : "you have checked that the payment reached your account."}</p>${kind !== "agreed" ? '<label>Payment Date</label><input name="date" type="date" required value="' + day + '"><label>Payment Method</label><input name="method" required maxlength="100"><label>Transaction Reference</label><input name="reference" required maxlength="200">' : ""}<label><input type="checkbox" required> I have verified this.</label><button class="btn primary">Confirm Record</button></form>`;
         root.scrollIntoView({ behavior: "smooth", block: "start" });
         $("#verify-payment-form").onsubmit = async (ev) => {
           ev.preventDefault();
@@ -250,7 +290,7 @@ async function loadPrivateOnboarding() {
   try {
     const data = await request();
     layout(
-      `<h1>Welcome, ${escapeText(data.name)}</h1><p>Your private onboarding page. You do not need a CRM account yet.</p><details class="onboarding-agreement" ${data.agreement ? "" : "open"}><summary>Service Agreement ${data.agreement ? "· Acknowledged" : ""}</summary><div class="terms-copy">${escapeText(data.terms || "Rituparna is finalising your Service Agreement. Please wait for confirmation before paying.")}</div>${data.approved && !data.agreement ? '<form id="private-agree"><label>Full Name</label><input name="name" required maxlength="200"><label><input type="checkbox" required> I have read and agree to these terms.</label><p class="small muted">This records acknowledgement by the holder of this private link; it does not independently verify identity.</p><button class="btn primary">Acknowledge Service Agreement</button></form>' : ""}</details>${data.deposit ? `<h2>Your Onboarding Questionnaire</h2><p>Save your progress, then submit when all answers are complete.</p><form id="private-intake">${data.questions.map((q, i) => `${i % 6 === 0 ? `<details ${i === 0 ? "open" : ""}><summary>${pillars[Math.floor(i / 6)]}</summary>` : ""}<div class="field"><label for="private-answer-${i}">${i + 1}. ${escapeText(q)}</label><textarea id="private-answer-${i}" name="q${i}" maxlength="10000" ${data.intake?.submitted ? "readonly" : ""}>${escapeText(data.intake?.answers?.[i] || "")}</textarea></div>${i % 6 === 5 ? "</details>" : ""}`).join("")}${data.intake?.submitted ? '<p class="note">Your answers have been received. Your personalised plan will be prepared within three business days.</p>' : '<div class="actions"><button class="btn" name="intent" value="draft">Save Progress</button><button class="btn primary" name="intent" value="submit">Submit Questionnaire</button></div>'}</form>` : '<p class="note">Your questionnaire opens here once your CAD 150 deposit is verified. Rituparna will send payment instructions by email.</p>'}<p id="auth-error" role="alert"></p>`,
+      `<h1>Welcome, ${escapeText(data.name)}</h1><p>Your private onboarding page. You do not need a CRM account yet.</p><details class="onboarding-agreement" ${data.agreement ? "" : "open"}><summary>Service Agreement ${data.agreement ? "· Acknowledged" : ""}</summary><div class="terms-copy">${escapeText(data.terms || "Rituparna is finalising your Service Agreement. Please wait for confirmation before paying.")}</div>${data.approved && !data.agreement ? '<form id="private-agree"><label>Full Name</label><input name="name" required maxlength="200"><label><input type="checkbox" required> I have read and agree to these terms.</label><p class="small muted">This records acknowledgement by the holder of this private link; it does not independently verify identity.</p><button class="btn primary">Acknowledge Service Agreement</button></form>' : ""}</details>${data.deposit ? `<h2>Your Onboarding Questionnaire</h2><p>Save your progress, then submit when all answers are complete.</p><form id="private-intake">${data.questions.map((q, i) => `${i % 6 === 0 ? `<details ${i === 0 ? "open" : ""}><summary>${pillars[Math.floor(i / 6)]}</summary>` : ""}<div class="field"><label for="private-answer-${i}">${i + 1}. ${escapeText(q)}</label><textarea id="private-answer-${i}" name="q${i}" maxlength="10000" ${data.intake?.submitted ? "readonly" : ""}>${escapeText(data.intake?.answers?.[i] || "")}</textarea></div>${i % 6 === 5 ? "</details>" : ""}`).join("")}${data.intake?.submitted ? '<p class="note">Your answers have been received. Your personalised plan will be prepared within three business days.</p>' : '<div class="actions"><button class="btn" name="intent" value="draft">Save Progress</button><button class="btn primary" name="intent" value="submit">Submit Questionnaire</button></div>'}</form>` : '<p class="note">Your questionnaire opens here once your required package payment is verified. Rituparna will send payment instructions by email.</p>'}<p id="auth-error" role="alert"></p>`,
     );
     document
       .querySelector("#private-agree")
@@ -300,4 +340,37 @@ async function loadPrivateOnboarding() {
       `<h1>Private Onboarding</h1><p>${escapeText(err.message)}</p><p>Please contact seekbyritu@gmail.com if you need a new link.</p>`,
     );
   }
+}
+
+function calgaryProgrammeTime(p) {
+  return p.timeZone === coachingTime.calgary && p.localTime
+    ? p.localTime
+    : coachingTime.local(
+        coachingTime.utc({ date: p.start || day, time: p.time || "10:00" }),
+      ).time;
+}
+function bindTimePreviews() {
+  document.querySelectorAll('input[type="time"]').forEach((input) => {
+    const group = input.closest(".slot-row") || input.closest("form");
+    const date = group?.querySelector('input[type="date"]');
+    if (!date) return;
+    const preview = document.createElement("div");
+    preview.className = "small muted time-preview";
+    preview.setAttribute("aria-live", "polite");
+    if (group.classList.contains("slot-row"))
+      group.insertAdjacentElement("afterend", preview);
+    else input.insertAdjacentElement("afterend", preview);
+    const update = () => {
+      try {
+        preview.textContent = coachingTime.display(
+          coachingTime.fromLocal(date.value, input.value),
+        );
+      } catch (error) {
+        preview.textContent = error.message;
+      }
+    };
+    date.addEventListener("input", update);
+    input.addEventListener("input", update);
+    update();
+  });
 }

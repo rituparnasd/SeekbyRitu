@@ -66,7 +66,7 @@ All application records are encrypted with AES-256-GCM before database storage. 
 
 PostgreSQL transactions/advisory locking protect updates; record-level merge/conflict detection avoids silently overwriting another device's changed record. Private notes, other clients' records and future resource bodies are never delivered by the client state endpoint. Reports show missing coverage and distinguish completed/adapted/rest; they do not determine clinical improvement or refund eligibility. Plan history/versioned denominators still require coach review when assignments change.
 
-The scheduler checks due email drafts and completed weekly/day-30 reports every minute while the service runs. A sleeping/free instance will not run jobs while asleep; use an appropriate always-on deployment or external scheduler before relying on timely reminders. Times are currently UTC; client-local timezone scheduling and Google Calendar sync are not implemented.
+The scheduler checks due email drafts and completed weekly/day-30 reports every minute while the service runs. A sleeping/free instance will not run jobs while asleep; use an appropriate always-on deployment or external scheduler before relying on timely reminders. Calendar events show Calgary Time and India Time with explicit dates. New scheduling entries use Calgary wall time and follow its daylight-saving changes. Existing UTC event instants are preserved. Google Calendar sync is not implemented.
 
 The UI still loads aggregate workspace state. Records are stored separately and journal history is paginated, but high-volume pagination/load testing and retention/deletion workflows are not complete. Do not claim support for unlimited client/journal volume. File-evidence storage, payment processing, calendar-provider sync and independent security review remain separate work.
 
@@ -128,12 +128,32 @@ Catalogue and billing records use encrypted `documents` rows, are excluded from 
 
 Main navigation is Today, Clients, Calendar, Products & Services, Billing and Admin. Client-specific work belongs inside the selected client's record. Admin holds Gmail settings, encrypted backups and the explicitly requested sample preview. Live startup no longer creates a fictional client. Existing sample records are preserved and hidden from the normal client list.
 
-Clients receive no usable CRM invitation or login before **both** CAD 150 deposit and CAD 350 balance are recorded as verified. Seven-day private onboarding links grant only access to that client's Service Agreement acknowledgement and questionnaire; they never create a session. Submitted answers are preserved and trigger the existing three-business-day plan deadline. The coach offers walkthrough times by email and records the client's choice in their record. The full account setup link is supplied after balance verification. Old pre-payment sessions/invitations are blocked by the same server-side payment gate.
+Premium clients receive no usable CRM invitation or login before both CAD 150 deposit and CAD 350 balance are verified. Self-Guided and Guided clients require the full CAD 50 or CAD 100 package payment respectively. Seven-day private onboarding links grant only access to that client's Service Agreement acknowledgement and questionnaire; they never create a session. Submitted answers are preserved and trigger the existing three-business-day plan deadline. The coach offers walkthrough times by email and records the client's choice in their record. The full account setup link is supplied after balance verification. Old pre-payment sessions/invitations are blocked by the same server-side payment gate.
 
 The reviewed Inner Code template in Products & Services supplies programme terms; `FINAL_PROGRAMME_TERMS` remains a fallback. Templates with unresolved placeholders remain drafts. Private-link acknowledgement records the exact terms and version; it is not independent identity verification.
 
-Daily habits use compact pillar groups. Optional habit explanations appear in My Profile → My Plan rather than being repeated in daily tracking. Coaching calendar times remain explicitly UTC; external Google Calendar synchronization is not configured.
+Daily habits use compact pillar groups. Optional habit explanations appear in My Profile → My Plan rather than being repeated in daily tracking. Coaching calendar events show both Calgary Time and India Time. Entries use Calgary time; external Google Calendar synchronization is not configured.
 
 Billing supports optional Service Agreements (for example, a simple product may need only an invoice), partial verified payments and immutable numbered receipt snapshots. `Record Payment` requires coach verification, date, method and transaction reference; it rejects duplicate references and overpayments. Generic billing payments do not silently activate Inner Code coaching; use the client's guided enrolment verification for programme activation. Catalogue, invoice and receipt history survive product edits and are included in encrypted backups.
 
 A private business address is not printed on newly generated customer PDFs or email signatures by default. Set optional `PUBLIC_BUSINESS_ADDRESS` to a suitable public mailing address when needed. This display choice does not establish compliance with applicable tax or consumer-contract requirements. Existing issued documents are not rewritten.
+
+### Dual-zone scheduling
+
+The browser and server share `public/calendar.js` for Calgary (`America/Edmonton`) and India (`Asia/Kolkata`) conversions. Calendar dates, daily tracking dates, plan preparation deadlines and new programme starts follow Calgary dates. Calendar entries, walkthrough offers/bookings, preparation blocks and schedule emails show both zones with dates. Live input previews show the India equivalent before saving.
+
+New recurring schedules retain Calgary wall time across daylight-saving changes. Skipped or repeated Calgary clock-change times are rejected with an explanation rather than silently guessed. Existing stored UTC event instants are not shifted; saving a schedule intentionally updates future calls. Hold/resume preserves the wall time for new zoned schedules. Overlap checks compare instants, including cross-midnight events.
+
+The confirmed default draft deposit-return wording is **within five business days for eligible CAD 150 deposits**. It does not automatically approve terms, rewrite issued/acknowledged documents, decide refund eligibility or trigger a bank transfer. The revised invoice and agreement design awaits the user's reference PDF.
+
+**Admin → Run Live Check** performs a read-only database/encryption check on the running deployment and reports configuration, dual-zone clock and available Render build reference. It does not send email, collect payment, prove inbox delivery or verify the full live client journey.
+
+### Inner Code packages
+
+Standard new enrolments select a package: Self-Guided CAD 50 (India audience, no calls); Guided Coaching CAD 100 (India audience, six 20-minute calls on Days 5/10/15/20/25/30); Premium Inner Code CAD 500 (Canada audience, one onboarding week/walkthrough, ten 20-minute calls every third day, CAD 150 included deposit plus CAD 350 balance). Premium's final stated completion threshold is 95%, superseding the earlier 90% draft; eligible deposits return within five business days. No accountability deposit or Premium refund threshold is applied to the two India packages.
+
+Entitlements are snapshotted per client. Paid programmes cannot silently switch packages. The two India programmes activate only after full payment, questionnaire and plan readiness; their flow does not demand a Premium deposit or walkthrough. Account invitation gates, invoices, receipts and call generation use the selected package. The customer region labels describe the intended audience and are not inferred from ethnicity or language.
+
+Products & Services includes direct package invoice/agreement sample previews. `node scripts/design-package-previews.mjs` creates six standalone branded PDF design previews under `docs/previews/packages`. Each invoice is one page and each agreement two pages for the supplied default scope. Preview documents are marked SAMPLE; pending completion, cancellation and privacy terms still require business review. Approved/issued historical documents are preserved.
+
+Timezone rules are supplied by the server to the browser so differing browser timezone databases do not produce inconsistent Calgary appointments. Both date and time are shown for Calgary and India, including next-day India times. No fixed Calgary UTC offset is hardcoded.

@@ -210,6 +210,31 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       state.mode = "coach";
       render();
     });
+    const dualZoneText = await page.evaluate(() => {
+      state.client = clients.find((c) => c.isTest).id;
+      workflow(state.client).booking = { date: "2026-12-10", time: "21:00" };
+      state.view = "clienthub";
+      render();
+      return document.querySelector(".content").textContent;
+    });
+    assert.match(dualZoneText, /Calgary Time: 10 Dec 2026, 02:00 pm/);
+    assert.match(dualZoneText, /India Time: 11 Dec 2026, 02:30 am/);
+    await page.evaluate(() => saveChain);
+    const foldMessage = await page.evaluate(() => {
+      const id = clients.find((c) => c.isTest).id,
+        old = structuredClone(state.programmes[id]);
+      state.programmes[id] = { ...old, start: "2026-11-01", time: "07:30" };
+      delete state.programmes[id].timeZone;
+      delete state.programmes[id].localTime;
+      state.view = "calendar";
+      render();
+      const text = document.querySelector(".content").textContent;
+      state.programmes[id] = old;
+      render();
+      return text;
+    });
+    assert.match(foldMessage, /occurs twice/);
+    await page.evaluate(() => saveChain);
     for (const width of [375, 700, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       for (const view of [

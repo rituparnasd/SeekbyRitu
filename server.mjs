@@ -30,7 +30,8 @@ import { reportData, reportPDF } from "./lib/reports.mjs";
 import { pdfDocument, agreementText } from "./lib/documents.mjs";
 import { billingStore, billingPDF } from "./lib/billing.mjs";
 import "./public/intake.js";
-import { innerCodeTerms } from "./lib/inner-code-terms.mjs";
+import "./public/packages.js";
+import { packageTerms } from "./lib/package-terms.mjs";
 const origin = process.env.APP_ORIGIN || "",
   production = process.env.NODE_ENV !== "test";
 const required = [
@@ -114,10 +115,12 @@ async function mailConfigured() {
       )
     : !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
 }
+const timezoneRules = globalThis.coachingTime.createRules();
 const finalTerms = process.env.FINAL_PROGRAMME_TERMS || "";
-async function approvedProgrammeTerms() {
+async function approvedProgrammeTerms(packageId = "inner-code") {
   const rows = await db.query(
-    "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key='inner-code'",
+    "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key=?",
+    [packageId],
   );
   const product = rows[0] ? crypt.open(rows[0].payload) : null;
   return product?.approved &&
@@ -126,14 +129,16 @@ async function approvedProgrammeTerms() {
       product.terms,
     )
     ? product.terms
-    : finalTerms;
+    : packageId === "inner-code"
+      ? finalTerms
+      : "";
 }
 async function requireFullPayment(id) {
   const p = (await stateRead()).programmes[id];
-  if (!p?.deposit || !p?.balance)
+  if (!globalThis.innerCodePackages.paid(p))
     fail(
       403,
-      "Your account opens after the full CAD 500 payment has been verified. Use your private onboarding link before then.",
+      `Your account opens after the full CAD ${globalThis.innerCodePackages.get(p).price} package payment has been verified. Use your private onboarding link before then.`,
     );
 }
 async function onboardingLink(id) {
@@ -160,7 +165,7 @@ const exclusive = (fn) => {
   serial = p.catch(() => {});
   return p;
 };
-const day = () => new Date().toISOString().slice(0, 10);
+const day = () => globalThis.coachingTime.today();
 const emailHash = (email) => digest(email.toLowerCase().trim());
 const fail = (status, message) => {
   throw Object.assign(Error(message), { status });
@@ -427,7 +432,8 @@ async function mergeClient(old, incoming, a) {
     }
   }
   if (incoming.intakes?.[id] && !s.intakes[id]?.submitted) {
-    if (!s.programmes[id]?.deposit) fail(403, "Deposit confirmation required");
+    if (!globalThis.innerCodePackages.questionnaireReady(s.programmes[id]))
+      fail(403, "Required package payment must be verified");
     const v = incoming.intakes[id];
     if (
       !Array.isArray(v.answers) ||
@@ -450,7 +456,8 @@ async function mergeClient(old, incoming, a) {
       !w?.slots?.some(
         (x) => x.date === proposed.date && x.time === proposed.time,
       ) ||
-      proposed.date < day()
+      globalThis.coachingTime.local(globalThis.coachingTime.utc(proposed))
+        .date < day()
     )
       fail(400, "Slot is not available");
     for (const [other, ow] of Object.entries(s.workflow)) {
@@ -464,21 +471,19 @@ async function mergeClient(old, incoming, a) {
       if (
         block &&
         !ow.planReady &&
-        block.date === proposed.date &&
-        timeMinutes(proposed.time) <
-          timeMinutes(block.time) + (block.duration || 60) &&
-        timeMinutes(proposed.time) + 30 > timeMinutes(block.time)
+        globalThis.coachingTime.overlaps(
+          proposed,
+          block,
+          30,
+          block.duration || 60,
+        )
       )
         fail(409, "Slot overlaps a work block");
     }
     for (const p of Object.values(s.programmes)) {
       if (p.status !== "Active") continue;
       for (const call of p.calls || [])
-        if (
-          call.date === proposed.date &&
-          timeMinutes(proposed.time) < timeMinutes(call.time) + 20 &&
-          timeMinutes(proposed.time) + 30 > timeMinutes(call.time)
-        )
+        if (globalThis.coachingTime.overlaps(proposed, call, 30, 20))
           fail(409, "Slot overlaps a coaching call");
     }
     s.workflow[id].booking = { date: proposed.date, time: proposed.time };
@@ -613,14 +618,24 @@ async function ensureAccounts(s) {
   }
 }
 async function financialRecord(s, id, kind, stage) {
-  const finalTerms = await approvedProgrammeTerms();
+  const cfg = globalThis.innerCodePackages.get(s.programmes[id]);
+  if (!cfg.deposit) stage = "balance";
+  const finalTerms = await approvedProgrammeTerms(cfg.id);
   const l = s.leads.find((l) => l.id === id);
   if (!l) fail(404, "Client not found");
   const version =
     kind === "agreement" ? ":" + digest(finalTerms || "draft").slice(0, 8) : "";
   const reference =
     "SEEK-" +
-    digest(id + ":" + stage + ":" + kind + version)
+    digest(
+      id +
+        ":" +
+        stage +
+        ":" +
+        kind +
+        version +
+        (cfg.id === "inner-code" ? "" : ":" + cfg.id),
+    )
       .slice(0, 12)
       .toUpperCase();
   const rows = await db.query(
@@ -634,13 +649,15 @@ async function financialRecord(s, id, kind, stage) {
     business,
     client: l.first + " " + l.last,
     reference,
-    amount: stage === "deposit" ? 150 : 350,
+    amount: stage === "deposit" ? cfg.deposit : cfg.balance,
+    packageSnapshot: structuredClone(cfg),
+    stage,
     paymentDetails: s.programmes[id]?.paymentDetails?.[stage],
-    date: (
+    date:
       s.programmes[id]?.paymentDetails?.[stage]?.date ||
-      s.programmes[id]?.verifiedAt?.[stage] ||
-      new Date().toISOString()
-    ).slice(0, 10),
+      (s.programmes[id]?.verifiedAt?.[stage]
+        ? globalThis.coachingTime.dateAt(s.programmes[id].verifiedAt[stage])
+        : day()),
     body: l.isTest
       ? "FICTIONAL TRAINING RECORD — No payment was collected. Not a real invoice, receipt or signed agreement."
       : kind === "agreement"
@@ -665,10 +682,11 @@ async function financialRecord(s, id, kind, stage) {
   return record;
 }
 async function prepareEmail(id, actor) {
-  const finalTerms = await approvedProgrammeTerms();
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
+  const cfg = globalThis.innerCodePackages.get(state.programmes[e.client]);
+  const finalTerms = await approvedProgrammeTerms(cfg.id);
   if (["billing", "billingreceipt"].includes(e.type)) {
     const record = [
       ...(await billingStore(db, crypt, finalTerms).documents()),
@@ -766,12 +784,15 @@ async function prepareEmail(id, actor) {
     if (pending.mail) return { mail: pending.mail };
   }
   let link = "";
-  if (["paid"].includes(e.type)) {
+  if (e.type === "activation" || (e.type === "paid" && cfg.walkthrough)) {
     await ensureAccounts(state);
     const a = await account(e.client);
     link = a?.password ? origin : await invitation(e.client);
   }
-  if (["first", "deposit", "questionnaire-reminder"].includes(e.type))
+  if (
+    ["first", "deposit", "questionnaire-reminder"].includes(e.type) ||
+    (e.type === "paid" && !cfg.walkthrough)
+  )
     link = await onboardingLink(e.client);
   const cleanBody = String(e.body || "")
     .replaceAll("in this demo", "")
@@ -800,12 +821,19 @@ async function prepareEmail(id, actor) {
   };
   if (["slots", "slot-reminder"].includes(e.type))
     mail.text +=
-      "\n\nAvailable Walkthrough Times (UTC):\n" +
+      "\n\nAvailable Walkthrough Times:\n" +
       (state.workflow[e.client]?.slots || [])
-        .map((s) => `${s.date} at ${s.time}`)
+        .map((s) => globalThis.coachingTime.display(s))
         .join("\n");
+  if (e.type === "booking" && state.workflow[e.client]?.booking)
+    mail.text +=
+      "\n\n" +
+      globalThis.coachingTime.display(state.workflow[e.client].booking);
   const attachments = [];
-  const stage = ["balance", "paid"].includes(e.type) ? "balance" : "deposit";
+  const stage =
+    !cfg.deposit || ["balance", "paid"].includes(e.type)
+      ? "balance"
+      : "deposit";
   if (
     ["deposit", "paid"].includes(e.type) &&
     !state.programmes[e.client]?.[stage]
@@ -827,10 +855,10 @@ async function prepareEmail(id, actor) {
   }
   if (e.type === "first")
     attachments.push({
-      filename: "deposit-invoice.pdf",
+      filename: cfg.deposit ? "deposit-invoice.pdf" : "invoice.pdf",
       content: (
         await pdfDocument(
-          await financialRecord(state, e.client, "invoice", "deposit"),
+          await financialRecord(state, e.client, "invoice", stage),
         )
       ).toString("base64"),
     });
@@ -960,6 +988,8 @@ const server = http.createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   try {
     const finalTerms = db ? await approvedProgrammeTerms() : "";
+    if (path === "/api/timezones" && req.method === "GET")
+      return json(res, 200, { rules: timezoneRules });
     if (path === "/health")
       return json(res, 200, {
         status: db ? "ok" : "setup_required",
@@ -1177,11 +1207,13 @@ const server = http.createServer(async (req, res) => {
             lead = s.leads.find((l) => l.id === link.client),
             p = s.programmes[link.client] || {};
           if (!lead) fail(404, "Client not found");
-          if (p.balance)
+          if (p.balance && s.intakes[lead.id]?.submitted)
             fail(
               409,
               "Onboarding is complete. Use your account activation email to sign in.",
             );
+          const cfg = globalThis.innerCodePackages.get(p);
+          const finalTerms = await approvedProgrammeTerms(cfg.id);
           const version = digest(finalTerms);
           if (req.method === "GET")
             return json(res, 200, {
@@ -1190,7 +1222,8 @@ const server = http.createServer(async (req, res) => {
               version,
               approved: !!finalTerms,
               agreement: s.agreements[lead.id] || null,
-              deposit: !!p.deposit,
+              deposit: globalThis.innerCodePackages.questionnaireReady(p),
+              package: cfg,
               intake: s.intakes[lead.id] || null,
               questions: globalThis.seekIntakeQuestions,
             });
@@ -1224,10 +1257,10 @@ const server = http.createServer(async (req, res) => {
               at,
             };
           } else if (b.action === "intake") {
-            if (!p.deposit)
+            if (!globalThis.innerCodePackages.questionnaireReady(p))
               fail(
                 403,
-                "The questionnaire opens after your deposit is verified.",
+                "The questionnaire opens after the required package payment is verified.",
               );
             if (s.intakes[lead.id]?.submitted)
               fail(
@@ -1267,7 +1300,11 @@ const server = http.createServer(async (req, res) => {
         await requireFullPayment(a.id);
       if (path === "/api/billing" || path.startsWith("/api/billing/")) {
         if (a.role !== "coach") fail(403, "Coach access required");
-        const store = billingStore(db, crypt, finalTerms || innerCodeTerms);
+        const store = billingStore(
+          db,
+          crypt,
+          finalTerms || packageTerms("inner-code"),
+        );
         if (path === "/api/billing" && req.method === "GET")
           return await exclusive(async () =>
             json(res, 200, {
@@ -1350,16 +1387,93 @@ const server = http.createServer(async (req, res) => {
           });
         fail(405, "Method not allowed");
       }
-      if (path === "/api/terms" && req.method === "GET")
+      if (path === "/api/package-preview" && req.method === "GET") {
+        if (a.role !== "coach") fail(403, "Coach access required");
+        const u = new URL(req.url, origin),
+          packageId = u.searchParams.get("package"),
+          kind =
+            u.searchParams.get("kind") === "agreement"
+              ? "agreement"
+              : "invoice";
+        let cfg;
+        try {
+          cfg = globalThis.innerCodePackages.get(packageId);
+        } catch {
+          fail(400, "Choose a valid package");
+        }
+        const terms = await approvedProgrammeTerms(cfg.id);
+        const bytes = await pdfDocument({
+          kind,
+          isTest: true,
+          packageSnapshot: cfg,
+          stage: cfg.deposit ? "deposit" : "balance",
+          previewTerms: terms || packageTerms(cfg.id),
+          business,
+          client: "Sample Client",
+          reference: "PREVIEW-" + cfg.id,
+          date: day(),
+          amount: cfg.deposit || cfg.price,
+          body:
+            kind === "agreement"
+              ? terms || packageTerms(cfg.id)
+              : "Payment instructions will be provided by Rituparna. This is a sample, not a payment request.",
+        });
+        res.writeHead(200, {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${cfg.id}-${kind}-PREVIEW.pdf"`,
+        });
+        return res.end(bytes);
+      }
+      if (path === "/api/verification" && req.method === "GET") {
+        if (a.role !== "coach") fail(403, "Coach access required");
+        let storage = "Could not verify storage";
+        try {
+          const row = (await db.query("SELECT 1 AS ready"))[0];
+          if (
+            Number(row?.ready) === 1 &&
+            crypt.open(crypt.seal({ ok: true })).ok
+          )
+            storage = "Verified: database responds and encrypted storage works";
+        } catch {}
+        const now = new Date();
         return json(res, 200, {
-          terms: finalTerms || agreementText(business),
-          approved: !!finalTerms,
+          checkedAt: now.toISOString(),
+          times: globalThis.coachingTime.display({
+            date: now.toISOString().slice(0, 10),
+            time: now.toISOString().slice(11, 16),
+          }),
+          checks: {
+            Storage: storage,
+            ProgrammeTerms: finalTerms
+              ? "Reviewed terms are configured"
+              : "Final terms still need approval",
+            EmailSetup: (await mailConfigured())
+              ? "Configured; actual inbox delivery is not yet proved"
+              : "Connect your email provider",
+            Calendar: "Calgary Time and India Time enabled",
+            Build: process.env.RENDER_GIT_COMMIT
+              ? process.env.RENDER_GIT_COMMIT.slice(0, 12)
+              : "Local build",
+          },
+          limitations:
+            "This check does not verify inbox delivery, bank payments or the full client journey.",
+        });
+      }
+      if (path === "/api/terms" && req.method === "GET") {
+        const packageId = globalThis.innerCodePackages.get(
+          (await stateRead()).programmes[a.id],
+        ).id;
+        const terms = await approvedProgrammeTerms(packageId);
+        return json(res, 200, {
+          terms: terms || agreementText(business, packageId),
+          approved: !!terms,
           business: {
             name: business.name,
             currency: business.currency,
             publicAddress: business.publicAddress,
           },
         });
+      }
       if (path === "/api/me")
         return json(res, 200, {
           csrf: auth.csrf,
@@ -1501,6 +1615,28 @@ const server = http.createServer(async (req, res) => {
             }
           if (a.role === "coach")
             for (const [id, p] of Object.entries(next.programmes)) {
+              const previous = old.programmes[id];
+              const packageId =
+                p.packageId || previous?.packageId || "inner-code";
+              if (
+                previous &&
+                (previous.deposit || previous.balance) &&
+                packageId !== (previous.packageId || "inner-code")
+              )
+                fail(
+                  409,
+                  "A paid programme cannot be switched to another package. Create a separate enrolment.",
+                );
+              p.packageId = packageId;
+              p.packageSnapshot =
+                previous &&
+                (previous.packageId || "inner-code") === packageId &&
+                previous.packageSnapshot
+                  ? previous.packageSnapshot
+                  : structuredClone(
+                      globalThis.innerCodePackages.get(packageId),
+                    );
+
               p.verifiedAt = { ...(old.programmes[id]?.verifiedAt || {}) };
               for (const stage of ["deposit", "balance"])
                 if (p[stage] && !old.programmes[id]?.[stage])
@@ -1523,7 +1659,7 @@ const server = http.createServer(async (req, res) => {
         return await exclusive(async () => {
           if (a.role !== "coach") fail(403, "Coach access required");
           const s = await stateRead(),
-            lead = addTestClient(s);
+            lead = addTestClient(s, day());
           await ensureAccounts(s);
           await stateWrite(s);
           await audit(a.id, "test_client_created");
@@ -1609,7 +1745,14 @@ const server = http.createServer(async (req, res) => {
         if (!l) fail(404, "Client not found");
         if (!["agreement", "invoice", "receipt"].includes(kind))
           fail(404, "Document not found");
-        if (kind === "receipt" && !s.programmes[id]?.[stage])
+        if (
+          kind === "receipt" &&
+          !s.programmes[id]?.[
+            globalThis.innerCodePackages.get(s.programmes[id]).deposit
+              ? stage
+              : "balance"
+          ]
+        )
           fail(409, "Payment has not been confirmed");
         let record = await financialRecord(s, id, kind, stage);
         if (kind === "agreement" && s.agreements[id]?.version) {
@@ -1693,6 +1836,11 @@ const server = http.createServer(async (req, res) => {
       }
       if (path === "/api/agreement" && req.method === "POST")
         return await exclusive(async () => {
+          const finalTerms = await approvedProgrammeTerms(
+            globalThis.innerCodePackages.get(
+              (await stateRead()).programmes[a.id],
+            ).id,
+          );
           if (finalTerms.length > 20000)
             fail(409, "Programme terms exceed the supported limit");
           if (
@@ -1747,6 +1895,7 @@ const server = http.createServer(async (req, res) => {
         "assets/fonts/OpenSans-Semibold.ttf",
       "/auth.js": "auth.js",
       "/calendar.js": "calendar.js",
+      "/packages.js": "packages.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
       "/assets/fonts/NotoSerif-Regular.ttf":
         "assets/fonts/NotoSerif-Regular.ttf",

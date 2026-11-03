@@ -40,6 +40,7 @@ async function boot() {
       );
       return;
     }
+    coachingTime.configure((await api("/api/timezones")).rules);
     if (new URL(location.href).searchParams.has("onboarding")) {
       await loadPrivateOnboarding();
       return;
