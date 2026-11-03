@@ -36,8 +36,7 @@ function clientStage(id) {
     cfg = packageFor(id),
     first = state.outbox[id + ":first"];
   if (p.status === "On Hold") return { label: "On Hold", view: "calendar" };
-  if (p.status === "Ended")
-    return { label: "Program Ended", view: "reports" };
+  if (p.status === "Ended") return { label: "Program Ended", view: "reports" };
   if (p.status === "Active")
     return {
       label: p.start > day ? "Starting Soon" : "Program Active",
@@ -151,10 +150,10 @@ function clientHub() {
         .filter((e) => e.client === x.id)
         .map(
           (e) =>
-            `<div class="list-item row"><span>${esc(e.subject)} · ${esc(e.status === "Cancelled" ? "Canceled" : e.status)}</span><button class="btn subtle" data-client-email="${e.id}">Review</button></div>`,
+            `<div class="list-item row"><span>${esc(e.subject)} · ${esc(e.status === "Cancelled" ? "Canceled" : e.status)}</span><div class="small muted" data-email-annotation="${esc(e.id)}"></div><button class="btn subtle" data-client-email="${e.id}">Review</button></div>`,
         )
         .join("") || "<p>No messages prepared yet.</p>"
-    }</details></aside></div>`
+    }</details><details class="card"><summary>Communications & Internal Notes</summary><div id="client-communications">Loading communication history…</div></details></aside></div>`
   );
 }
 function adminPage() {
@@ -164,6 +163,8 @@ function adminPage() {
   );
 }
 function bindSimpleWorkspace() {
+  loadClientCommunications();
+  loadCommunicationTasks();
   $("#run-live-check")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
     const result = $("#live-check-result");
@@ -216,7 +217,7 @@ function bindSimpleWorkspace() {
         const e = state.outbox[b.dataset.clientEmail];
         if (!e) return;
         $("#client-email-panel").innerHTML =
-          `<section class="card"><h2>${esc(e.subject)}</h2><p class="email-body">${esc(e.body)}</p><p class="small muted">Status: ${esc(e.status === "Cancelled" ? "Canceled" : e.status)}. Attachments and private links are added from the verified record.</p><button class="btn primary" id="send-client-email" ${["Sent", "Unknown", "Paused", "Cancelled"].includes(e.status) ? "disabled" : ""}>Send Email</button></section>`;
+          `<section class="card"><h2>${esc(e.subject)}</h2>${window.__clientCommunicationData?.emails.find((row) => row.id === e.id)?.annotation ? `<div class="note">${esc(window.__clientCommunicationData.emails.find((row) => row.id === e.id).annotation.disposition)} — ${esc(window.__clientCommunicationData.emails.find((row) => row.id === e.id).annotation.note)}</div>` : ""}<p class="email-body">${esc(e.body)}</p><p class="small muted">${(e.documentReferences || []).map((d) => esc(d.kind) + ": " + esc(d.reference)).join(" · ")}</p><p class="small muted">Status: ${esc(e.status === "Cancelled" ? "Canceled" : e.status)}. Attachments and private links are added from the verified record.</p><button class="btn primary" id="send-client-email" ${["Sent", "Unknown", "Paused", "Cancelled"].includes(e.status) ? "disabled" : ""}>Send Email</button></section>`;
         $("#client-email-panel").scrollIntoView({
           behavior: "smooth",
           block: "start",
@@ -398,4 +399,95 @@ function bindTimePreviews() {
     input.addEventListener("input", update);
     update();
   });
+}
+
+async function loadClientCommunications() {
+  const root = document.querySelector("#client-communications");
+  if (!root || state.mode !== "coach") return;
+  const id = c().id;
+  try {
+    const data = await api(
+      "/api/communications?client=" + encodeURIComponent(id),
+    );
+    if (!root.isConnected || c().id !== id) return;
+    window.__clientCommunicationData = data;
+    for (const email of data.emails) {
+      const el = [...document.querySelectorAll("[data-email-annotation]")].find(
+        (el) => el.dataset.emailAnnotation === email.id,
+      );
+      if (el && email.annotation)
+        el.textContent =
+          email.annotation.disposition +
+          " — " +
+          email.annotation.note +
+          (email.annotation.replacement
+            ? " · Replacement: " + email.annotation.replacement
+            : "");
+    }
+    root.innerHTML = `${data.reviews.map((r) => `<div class="note"><strong>Financial Records Need Review</strong><p>${esc(r.reason)}</p>${r.documents.map((d) => `<p>${esc(d.reference)} · ${esc(d.total !== undefined ? "CAD " + (d.total / 100).toFixed(2) : "Historical Client document")}</p>`).join("")}</div>`).join("")}<p class="small muted">Private coach notes. Adding a note does not send a message to the client.</p><form id="communication-note-form"><label>Channel</label><select name="channel">${["Internal Note", "WhatsApp", "Phone", "Meeting", "Email"].map((v) => `<option>${v}</option>`).join("")}</select><label>Related Email (Optional)</label><select name="emailId"><option value="">General client note</option>${data.emails.map((e) => `<option value="${esc(e.id)}">${esc(e.subject)} · ${esc(e.status)}</option>`).join("")}</select><label>Communication Status</label><select name="disposition"><option>Active</option><option>Superseded</option><option>Discarded</option></select><label>Summary / Reason</label><textarea name="note" maxlength="5000" required></textarea><label>Replacement Invoice / Receipt / Email Reference (Optional)</label><input name="replacement" maxlength="200"><label>Next Action (Optional)</label><input name="nextAction" maxlength="500"><label>Follow-Up Date (Optional)</label><input name="due" type="date"><button class="btn primary">Save Internal Note</button></form><details><summary>Communication & Document Timeline (${data.events.length})</summary>${data.events.map((e) => `<div class="list-item"><p class="small muted">${esc(e.createdAt)}${e.actor ? " · Coach" : ""}</p><p>${esc(e.label)}</p>${e.annotation ? `<p class="note">${esc(e.annotation.disposition)} — ${esc(e.annotation.note)}</p>` : ""}${e.nextAction ? `<p><strong>Next Action:</strong> ${esc(e.nextAction)}${e.due ? " · " + esc(e.due) : ""}</p>` : ""}</div>`).join("") || "<p>No communications recorded yet.</p>"}</details><details><summary>Financial Reconciliation Report</summary><p class="small muted">Read-only comparison. Historical records have not been deleted or renumbered.</p>${[...data.documents.map((d) => `Invoice: ${d.reference} · ${d.currency} ${(d.total / 100).toFixed(2)}`), ...data.payments.map((p) => `Billing Receipt: ${p.reference} · Invoice: ${p.invoiceReference} · CAD ${(p.receipt.amount / 100).toFixed(2)}`), ...data.legacyDocuments.map((d) => `Historical Client ${d.kind}: ${d.reference} · CAD ${d.amount}`)].map((t) => `<p>${esc(t)}</p>`).join("") || "<p>No financial documents yet.</p>"}</details>`;
+    root.querySelector("form").onsubmit = async (event) => {
+      event.preventDefault();
+      const button = event.target.querySelector("button");
+      button.disabled = true;
+      try {
+        await api("/api/communications", {
+          method: "POST",
+          headers: { "X-CSRF-Token": window.__session.csrf },
+          body: JSON.stringify({
+            ...Object.fromEntries(new FormData(event.target)),
+            client: id,
+          }),
+        });
+        toast("Internal communication note saved. No email was sent.");
+        await loadClientCommunications();
+      } catch (error) {
+        toast(error.message);
+        button.disabled = false;
+      }
+    };
+  } catch (error) {
+    if (root.isConnected) root.textContent = error.message;
+  }
+}
+
+async function loadCommunicationTasks() {
+  if (state.mode !== "coach" || state.view !== "work") return;
+  try {
+    const data = await api("/api/communication-tasks");
+    if (state.view !== "work" || state.mode !== "coach") return;
+    let root = document.querySelector("#communication-followups");
+    if (!root) {
+      root = document.createElement("section");
+      root.className = "card";
+      root.id = "communication-followups";
+      document.querySelector(".content")?.append(root);
+    }
+    root.innerHTML = `<h2>Communication Follow-Ups</h2>${data.tasks.map((n) => `<div class="list-item row"><div><strong>${esc(clients.find((c) => c.id === n.client)?.name || "Client")}</strong><p>${esc(n.nextAction)}</p><p class="small muted">${n.due ? "Due: " + esc(n.due) : "No deadline set"}</p></div><div class="actions"><button class="btn" data-open-followup="${esc(n.client)}">Open Client</button><button class="btn subtle" data-complete-followup="${esc(n.id)}">Mark Done</button></div></div>`).join("") || '<p class="muted">No communication follow-ups pending.</p>'}`;
+    root.querySelectorAll("[data-open-followup]").forEach(
+      (b) =>
+        (b.onclick = () => {
+          state.client = b.dataset.openFollowup;
+          navigate("clienthub");
+        }),
+    );
+    root.querySelectorAll("[data-complete-followup]").forEach(
+      (b) =>
+        (b.onclick = async () => {
+          b.disabled = true;
+          try {
+            await api("/api/communication-tasks", {
+              method: "POST",
+              headers: { "X-CSRF-Token": window.__session.csrf },
+              body: JSON.stringify({ id: b.dataset.completeFollowup }),
+            });
+            await loadCommunicationTasks();
+          } catch (e) {
+            toast(e.message);
+            b.disabled = false;
+          }
+        }),
+    );
+  } catch (e) {
+    toast(e.message);
+  }
 }

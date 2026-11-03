@@ -1,4 +1,9 @@
-import { adoptAmericanEnglish, americanEnglish } from "./lib/american-english.mjs";
+import { programmeLedger } from "./lib/programme-ledger.mjs";
+import { communicationStore } from "./lib/communications.mjs";
+import {
+  adoptAmericanEnglish,
+  americanEnglish,
+} from "./lib/american-english.mjs";
 import {
   removeRequestedMistakenInvoice,
   invoiceCleanupStatusKey,
@@ -322,6 +327,7 @@ async function stateWrite(s) {
   const offers = Object.fromEntries(
     offerRows.map((row) => [row.record_key, crypt.open(row.payload)]),
   );
+  await syncFinancialState(s);
   reconcileWorkflow(s, undefined, offers);
   for (const [id, journals] of Object.entries(s.journals))
     for (const [kind, entry] of Object.entries(journals)) {
@@ -711,7 +717,7 @@ async function ensureAccounts(s) {
       });
   }
 }
-async function financialRecord(s, id, kind, stage) {
+async function legacyFinancialRecord(s, id, kind, stage) {
   const cfg = globalThis.innerCodePackages.get(s.programmes[id]);
   if (
     globalThis.innerCodePackages.fullPayment(s.programmes[id]) &&
@@ -747,27 +753,27 @@ async function financialRecord(s, id, kind, stage) {
     [reference],
   );
   if (rows[0]) return crypt.open(rows[0].payload);
-  let displayReference = reference;
+  let displayReference = reference,
+    linkedInvoiceReference;
   if (kind === "invoice" || kind === "receipt") {
     const invoice =
       kind === "receipt"
-        ? await financialRecord(s, id, "invoice", stage)
+        ? await legacyFinancialRecord(s, id, "invoice", stage)
         : null;
-    displayReference =
-      invoice?.reference ||
-      documentReference(
-        cfg.id,
-        new Set(
-          (await db.query("SELECT payload FROM financial_documents")).map(
-            (row) => crypt.open(row.payload).reference,
-          ),
+    linkedInvoiceReference = invoice?.reference;
+    displayReference = documentReference(
+      cfg.id,
+      new Set(
+        (await db.query("SELECT payload FROM financial_documents")).map(
+          (row) => crypt.open(row.payload).reference,
         ),
-      );
+      ),
+    );
   }
   const record = {
     kind,
     storageId: reference,
-    invoiceReference: kind === "receipt" ? displayReference : undefined,
+    invoiceReference: kind === "receipt" ? linkedInvoiceReference : undefined,
     formatting:
       kind === "agreement" && template?.terms === finalTerms
         ? { terms: template.formatting?.terms }
@@ -827,10 +833,46 @@ async function financialRecord(s, id, kind, stage) {
     );
   return record;
 }
+async function financialRecord(s, id, kind, stage) {
+  return programmeLedger(db, crypt).resolve(s, id, kind, stage, (k, st) =>
+    legacyFinancialRecord(s, id, k, st),
+  );
+}
+async function syncFinancialState(s) {
+  const oldRows = await db.query(
+    "SELECT record_key,payload FROM documents WHERE section='programmes'",
+  );
+  const old = Object.fromEntries(
+    oldRows.map((r) => [r.record_key, crypt.open(r.payload)]),
+  );
+  for (const [id, p] of Object.entries(s.programmes || {})) {
+    if (!s.leads.some((l) => l.id === id)) continue;
+    const full = globalThis.innerCodePackages.fullPayment(p);
+    for (const stage of full
+      ? ["full"]
+      : globalThis.innerCodePackages.get(p).deposit
+        ? ["deposit", "balance"]
+        : ["balance"]) {
+      if (p[stage] && !old[id]?.[stage])
+        await financialRecord(s, id, "receipt", stage);
+    }
+  }
+}
 async function prepareEmail(id, actor) {
   const state = await stateRead(),
     e = state.outbox[id];
   if (!e) fail(404, "Message not found");
+  const annotation = await communicationStore(db, crypt).annotation(id);
+  if (
+    annotation &&
+    ["Superseded", "Discarded"].includes(annotation.disposition)
+  )
+    fail(
+      409,
+      "This email was marked " +
+        annotation.disposition +
+        ". Review the replacement communication instead.",
+    );
   const cfg = globalThis.innerCodePackages.get(state.programmes[e.client]);
   const finalTerms = await approvedProgrammeTerms(cfg.id);
   if (["billing", "billingreceipt"].includes(e.type)) {
@@ -895,11 +937,18 @@ async function prepareEmail(id, actor) {
         content: (await privacyPDF()).toString("base64"),
       });
     }
+    const documentReferences = (
+      record.status === "Receipt"
+        ? ["receipt"]
+        : record.requiresAgreement === false
+          ? ["invoice"]
+          : ["invoice", "agreement"]
+    ).map((kind) => ({ kind, reference: record.reference, id: record.id }));
     await db.query(
       "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
-      [id, crypt.seal({ status: "Pending", mail })],
+      [id, crypt.seal({ status: "Pending", mail, documentReferences })],
     );
-    return { mail };
+    return { mail, documentReferences };
   }
   if (state.leads.some((l) => l.id === e.client && l.isTest))
     fail(409, "Live email is disabled for test clients.");
@@ -935,7 +984,10 @@ async function prepareEmail(id, actor) {
   if (previous[0]) {
     const pending = crypt.open(previous[0].payload);
     if (pending.status === "Pending" && pending.mail)
-      return { mail: pending.mail };
+      return {
+        mail: pending.mail,
+        documentReferences: pending.documentReferences || [],
+      };
   }
   let link = "";
   if (
@@ -994,6 +1046,7 @@ async function prepareEmail(id, actor) {
       "\n\n" +
       globalThis.coachingTime.display(state.workflow[e.client].booking);
   const attachments = [];
+  const documentReferences = [];
   if (["first", "balance"].includes(e.type)) {
     const amount = globalThis.innerCodePackages.fullPayment(
       state.programmes[e.client],
@@ -1027,21 +1080,29 @@ async function prepareEmail(id, actor) {
           : "invoice";
     const record = await financialRecord(state, e.client, kind, stage);
     const pdf = await pdfDocument(record);
+    documentReferences.push({
+      kind,
+      reference: record.reference,
+      id: record.billingRecord?.id || record.storageId,
+    });
     attachments.push({
       filename: kind + ".pdf",
       content: pdf.toString("base64"),
     });
   }
-  if (e.type === "first")
+  if (e.type === "first") {
+    const invoice = await financialRecord(state, e.client, "invoice", stage);
+    documentReferences.push({
+      kind: "invoice",
+      reference: invoice.reference,
+      id: invoice.billingRecord?.id || invoice.storageId,
+    });
     attachments.push({
       filename:
         cfg.deposit && stage !== "full" ? "deposit-invoice.pdf" : "invoice.pdf",
-      content: (
-        await pdfDocument(
-          await financialRecord(state, e.client, "invoice", stage),
-        )
-      ).toString("base64"),
+      content: (await pdfDocument(invoice)).toString("base64"),
     });
+  }
   if (e.type === "first")
     attachments.push({
       filename: "privacy-policy.pdf",
@@ -1050,9 +1111,9 @@ async function prepareEmail(id, actor) {
   if (attachments.length) mail.attachments = attachments;
   await db.query(
     "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
-    [id, crypt.seal({ status: "Pending", mail })],
+    [id, crypt.seal({ status: "Pending", mail, documentReferences })],
   );
-  return { mail };
+  return { mail, documentReferences };
 }
 async function sendEmail(id, actor) {
   const prepared = await exclusive(() => prepareEmail(id, actor));
@@ -1103,6 +1164,7 @@ async function sendEmail(id, actor) {
     if (!e) fail(404, "Message no longer exists");
     const sent = delivery.status === "Sent";
     e.status = delivery.status;
+    e.documentReferences = prepared.documentReferences || [];
     e.lastError =
       delivery.status === "Sent"
         ? null
@@ -1116,7 +1178,15 @@ async function sendEmail(id, actor) {
     }
     await db.query(
       "INSERT INTO deliveries(id,payload) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
-      [id, crypt.seal({ status: e.status, at: e.sentAt, mail: prepared.mail })],
+      [
+        id,
+        crypt.seal({
+          status: e.status,
+          at: e.sentAt,
+          mail: prepared.mail,
+          documentReferences: prepared.documentReferences || [],
+        }),
+      ],
     );
     await stateWrite(s);
     await audit(actor, sent ? "email_sent" : "email_failed");
@@ -1520,6 +1590,59 @@ const server = http.createServer(async (req, res) => {
       const a = auth.account;
       if (a.role === "client" && path !== "/api/logout")
         await requireFullPayment(a.id);
+      if (path === "/api/communication-tasks") {
+        if (a.role !== "coach") fail(403, "Coach access required");
+        if (req.method === "GET")
+          return json(res, 200, {
+            tasks: await communicationStore(db, crypt).tasks(),
+          });
+        if (req.method === "POST")
+          return await exclusive(async () => {
+            const b = await body(req),
+              result = await communicationStore(db, crypt).complete(
+                await stateRead(),
+                b.id,
+                a.id,
+              );
+            await audit(a.id, "communication_followup_completed");
+            return json(res, 200, result);
+          });
+        fail(405, "Method not allowed");
+      }
+      if (path === "/api/communications") {
+        if (a.role !== "coach") fail(403, "Coach access required");
+        if (req.method === "GET")
+          return json(
+            res,
+            200,
+            await communicationStore(db, crypt).get(
+              await stateRead(),
+              new URL(req.url, origin).searchParams.get("client"),
+            ),
+          );
+        if (req.method === "POST")
+          return await exclusive(async () => {
+            const b = await body(req),
+              s = await stateRead();
+            const result = await communicationStore(db, crypt).annotate(
+              s,
+              b,
+              a.id,
+            );
+            const email = b.emailId ? s.outbox[b.emailId] : null;
+            if (
+              email &&
+              !["Sent", "Pending", "Unknown"].includes(email.status) &&
+              ["Discarded", "Superseded"].includes(result.disposition)
+            ) {
+              email.status = "Cancelled";
+              await stateWrite(s);
+            }
+            await audit(a.id, "communication_note_added");
+            return json(res, 201, { result });
+          });
+        fail(405, "Method not allowed");
+      }
       if (path === "/api/billing" || path.startsWith("/api/billing/")) {
         if (a.role !== "coach") fail(403, "Coach access required");
         const store = billingStore(
@@ -1568,11 +1691,18 @@ const server = http.createServer(async (req, res) => {
               result = await store.restoreDraft(b);
             else if (path === "/api/billing/draft")
               result = await store.saveDocument(b, business);
-            else if (path === "/api/billing/issue")
+            else if (path === "/api/billing/issue") {
               result = await store.issue(b.id, b.version);
-            else if (path === "/api/billing/payment")
+              result = await programmeLedger(db, crypt).bindInvoice(
+                await stateRead(),
+                result,
+              );
+            } else if (path === "/api/billing/payment") {
               result = await store.recordPayment(b);
-            else if (path === "/api/billing/revise")
+              const s = await stateRead();
+              if (programmeLedger(db, crypt).applyPayment(s, result))
+                await stateWrite(s);
+            } else if (path === "/api/billing/revise")
               result = await store.revise(b.id);
             else if (path === "/api/billing/queue") {
               const record = [
@@ -2100,7 +2230,7 @@ const server = http.createServer(async (req, res) => {
           ]
         )
           fail(409, "Payment has not been confirmed");
-        let record = await financialRecord(s, id, kind, stage);
+        let record = await exclusive(() => financialRecord(s, id, kind, stage));
         if (kind === "agreement" && s.agreements[id]?.version) {
           const signatures = (
             await db.query("SELECT payload FROM signatures")

@@ -493,6 +493,57 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
     );
     assert.equal(receipt.status(), 200);
     assert.equal(receipt.headers()["content-type"], "application/pdf");
+    const shared = await page.evaluate(() => api("/api/billing"));
+    const currentId = await page.evaluate(() => c().id);
+    const sharedInvoice = shared.documents.find(
+      (d) => d.clientId === currentId && d.paymentStage === "full",
+    );
+    const sharedReceipt = shared.payments.find(
+      (d) => d.invoiceId === sharedInvoice.id,
+    );
+    assert.equal(sharedReceipt.receipt.amount, 50000);
+    assert(
+      receipt
+        .headers()
+        ["content-disposition"].includes(sharedReceipt.reference),
+    );
+    assert.equal(
+      shared.payments.filter((d) => d.invoiceId === sharedInvoice.id).length,
+      1,
+    );
+    await page
+      .getByText("Communications & Internal Notes", { exact: true })
+      .click();
+    await page.locator("#communication-note-form").waitFor();
+    await page
+      .locator('#communication-note-form [name="note"]')
+      .fill("Client requested a full-payment receipt.");
+    await page
+      .locator('#communication-note-form [name="nextAction"]')
+      .fill("Arrange plan review after questionnaire");
+    await page
+      .locator('#communication-note-form [name="due"]')
+      .fill("2026-11-10");
+    await page
+      .getByRole("button", { name: "Save Internal Note", exact: true })
+      .click();
+    await page.waitForFunction(() =>
+      document
+        .querySelector("#client-communications")
+        ?.textContent.includes("Client requested a full-payment receipt."),
+    );
+    const comms = await page.evaluate(() =>
+      api("/api/communications?client=" + c().id),
+    );
+    assert(
+      comms.notes.some(
+        (n) => n.note === "Client requested a full-payment receipt.",
+      ),
+    );
+    assert(
+      comms.events.some((e) => e.label.includes(sharedReceipt.reference)),
+      "Shared receipt must appear in the client timeline",
+    );
 
     await page.reload();
     await page.locator('[data-view="clients"]').first().click();

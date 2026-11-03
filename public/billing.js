@@ -534,7 +534,10 @@ function bindBilling() {
       });
       billingPaymentEditor = null;
       await refreshBilling();
-      toast("Verified payment recorded. Your receipt is ready.");
+      await refreshWorkspaceState();
+      toast(
+        "Verified payment recorded. Client and Billing records are synchronized.",
+      );
     } catch (err) {
       toast(err.message);
       button.disabled = false;
