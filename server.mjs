@@ -666,7 +666,11 @@ async function financialRecord(s, id, kind, stage) {
         : kind === "receipt"
           ? "Payment manually verified by coach. This is not a payment processor verification."
           : "Payment instructions: " +
-            (process.env.PAYMENT_INSTRUCTIONS ||
+            (globalThis.innerCodePayments.instructions(
+              cfg.id,
+              stage === "deposit" ? cfg.deposit : cfg.balance,
+            ) ||
+              process.env.PAYMENT_INSTRUCTIONS ||
               "Pending. Do not pay until final terms are agreed."),
   };
   if (
@@ -831,6 +835,14 @@ async function prepareEmail(id, actor) {
       "\n\n" +
       globalThis.coachingTime.display(state.workflow[e.client].booking);
   const attachments = [];
+  if (["first", "balance"].includes(e.type)) {
+    const amount =
+      e.type === "balance" ? cfg.balance : cfg.deposit || cfg.balance;
+    const link = globalThis.innerCodePayments.url(cfg.id, amount);
+    if (link && !mail.text.includes(link))
+      mail.text +=
+        "\n\n" + globalThis.innerCodePayments.instructions(cfg.id, amount);
+  }
   const stage =
     !cfg.deposit || ["balance", "paid"].includes(e.type)
       ? "balance"
@@ -1896,6 +1908,7 @@ const server = http.createServer(async (req, res) => {
       "/auth.js": "auth.js",
       "/calendar.js": "calendar.js",
       "/packages.js": "packages.js",
+      "/payment-links.js": "payment-links.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
       "/assets/fonts/NotoSerif-Regular.ttf":
         "assets/fonts/NotoSerif-Regular.ttf",

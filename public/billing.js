@@ -101,7 +101,10 @@ function newBillingDraft() {
     terms: p?.terms || "",
     requiresAgreement: p?.requiresAgreement ?? p?.kind !== "Product",
     approved: false,
-    payment: "",
+    payment:
+      p && !Number(p.tax)
+        ? innerCodePayments.instructions(p.id, p.price, p.currency)
+        : "",
     notes: "",
   };
 }
@@ -280,6 +283,9 @@ function bindBilling() {
         documentEditor.items[Number(b.dataset.lineProduct)] =
           lineFromProduct(p);
         if (documentEditor.items.length === 1) {
+          documentEditor.payment = !Number(p.tax)
+            ? innerCodePayments.instructions(p.id, p.price, p.currency)
+            : "";
           documentEditor.terms = p.terms;
           documentEditor.requiresAgreement =
             p.requiresAgreement ?? p.kind !== "Product";
@@ -301,11 +307,15 @@ function bindBilling() {
               : "Inner Code — " + (price === 150 ? "Deposit" : "Balance"),
         });
         documentEditor.payment =
-          price === 150
-            ? "Inner Code total: CAD 500. Deposit requested: CAD 150. Remaining balance: CAD 350 after the plan walkthrough. Add payment method and receiving details."
-            : price === 350
-              ? "Inner Code total: CAD 500. Deposit: CAD 150 (verify separately). Balance requested: CAD 350. Add payment method and receiving details."
-              : documentEditor.payment;
+          documentEditor.items.length === 1 &&
+          !Number(documentEditor.items[n].tax) &&
+          !Number(documentEditor.items[n].discount)
+            ? innerCodePayments.instructions(
+                documentEditor.items[n].productId,
+                price,
+                "CAD",
+              )
+            : "";
         documentEditor.approved = false;
         render();
       }),

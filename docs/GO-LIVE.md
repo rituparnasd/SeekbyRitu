@@ -25,3 +25,11 @@ Final reviewed package terms and payment instructions are still required before 
 ## Verification status
 
 The signature-free release passed 33 local tests. This workspace has neither a bound Render API key/deploy hook nor network access to the Render host. Public `/health` verification was denied by the outbound proxy before reaching Render. GitHub publication is verified separately from production deployment; do not interpret the local test result as a verified live deployment.
+
+### Stripe Payment Links (3 November 2026)
+
+The four owner-provided public checkout links are configured in `public/payment-links.js`: Self-Guided CAD 50, Guided Coaching CAD 100, Premium deposit CAD 150, and Premium balance CAD 350. Programme payment-request emails and new invoice PDFs use the matching link. Billing drafts select a link only for a single matching CAD package instalment; changing the price, discount, quantity or tax requires matching payment instructions. Existing issued documents remain unchanged.
+
+These links do not verify payments automatically. Verify the payment in Stripe before confirming the corresponding payment in the client record. No Stripe webhook is configured by this change. Checkout amounts and actual inbox delivery still require live verification. Final programme terms must be completed and approved before enrolment emails can be sent.
+
+Validation: syntax checks and all 34 tests passed, including exact checkout-link mapping, customised invoice mismatch rejection, package workflows and browser journeys. No actual payment or enrolment email was sent during testing.
