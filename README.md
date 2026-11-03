@@ -9,7 +9,7 @@ The original seeded demonstration clients were removed. A fresh database starts 
 - Encrypted server records, server-enforced client isolation, coach-only private notes and unreleased-resource filtering.
 - Leads, original 30-question intake, agreed profiles, manually assigned habits/practices, check-ins, separate journals with dated history and internal scheduling.
 - Event-generated coach tasks, plan deadlines and email queue; server-side event reconciliation works without a coach browser open.
-- Daily resource gating, optional coach approval, weekly/day-30 report generation, PDF invoices/receipts/one-page agreement and encrypted backup export/restore.
+- Daily resource gating, optional coach approval, weekly/day-30 report generation, PDF invoices/receipts/reference-style agreements and encrypted backup export/restore.
 - Gmail OAuth sending from/replies to seekbyritu@gmail.com, with PDF attachments. Tokens are encrypted; no Gmail password is stored. No mail is sent until Google consent and final business settings are configured.
 
 This is an initial server-backed implementation, **not a completed security certification or production launch approval**. Real PostgreSQL/Render deployment, deliverability, legal terms and scale/load verification remain outstanding. The original logo was extracted losslessly, including its original transparency, from the supplied draft PDF. It is bundled in the app and document templates; no substitute monogram is used.
@@ -159,3 +159,7 @@ Entitlements are snapshotted per client. Paid programmes cannot silently switch 
 Products & Services includes direct package invoice/agreement sample previews. `node scripts/design-package-previews.mjs` creates six standalone branded PDF design previews under `docs/previews/packages`. Each invoice is one page and each agreement two pages for the supplied default scope. Preview documents are marked SAMPLE; pending completion, cancellation and privacy terms still require business review. Approved/issued historical documents are preserved.
 
 Timezone rules are supplied by the server to the browser so differing browser timezone databases do not produce inconsistent Calgary appointments. Both date and time are shown for Calgary and India, including next-day India times. No fixed Calgary UTC offset is hardcoded.
+
+### Owner master document templates
+
+The active invoice, receipt and agreement layout follows the supplied Canada PDFs for all catalogue offers. The three owner-approved packages share this design while retaining their own content, prices, calls and payment methods. Canada defaults to Interac e-Transfer; India packages use their supplied Stripe links. What Happens Next is editable per product and invoice. New invoice references contain random letters with package-specific prefixes. Native date fields have visible Calendar buttons. A one-time production migration adopts the supplied defaults while preserving prior catalogue versions and historical financial records. See docs/qa/2026-11-03-owner-master-templates.md for validation and migration details.

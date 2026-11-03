@@ -1,3 +1,5 @@
+import { adoptApprovedPackageTemplates } from "./lib/approved-package-templates.mjs";
+import { documentReference } from "./lib/document-references.mjs";
 import {
   removeRequestedDrafts,
   draftCleanupMarker,
@@ -62,7 +64,10 @@ if (!missing.length) {
     crypt = encryption(process.env.DATA_ENCRYPTION_KEY);
     stage = "database";
     db = await database();
-    if (production) await removeRequestedDrafts(db, crypt);
+    if (production) {
+      await removeRequestedDrafts(db, crypt);
+      await adoptApprovedPackageTemplates(db, crypt);
+    }
   } catch (error) {
     initError = true;
     setupDiagnostic = setupDiagnosis(stage, error);
@@ -280,7 +285,13 @@ async function revision() {
   );
 }
 async function stateWrite(s) {
-  reconcileWorkflow(s);
+  const offerRows = await db.query(
+    "SELECT record_key,payload FROM documents WHERE section='billing_catalogue'",
+  );
+  const offers = Object.fromEntries(
+    offerRows.map((row) => [row.record_key, crypt.open(row.payload)]),
+  );
+  reconcileWorkflow(s, undefined, offers);
   for (const [id, journals] of Object.entries(s.journals))
     for (const [kind, entry] of Object.entries(journals)) {
       if (!["daily", "learn"].includes(kind) || !entry?.at) continue;
@@ -506,8 +517,13 @@ async function mergeClient(old, incoming, a) {
     for (const [other, ow] of Object.entries(s.workflow)) {
       if (
         other !== id &&
-        ow.booking?.date === proposed.date &&
-        Math.abs(timeMinutes(ow.booking.time) - timeMinutes(proposed.time)) < 30
+        ow.booking &&
+        globalThis.coachingTime.overlaps(
+          proposed,
+          ow.booking,
+          15,
+          ow.booking.duration || 15,
+        )
       )
         fail(409, "Slot was already booked");
       const block = ow.workBlock;
@@ -517,7 +533,7 @@ async function mergeClient(old, incoming, a) {
         globalThis.coachingTime.overlaps(
           proposed,
           block,
-          30,
+          15,
           block.duration || 60,
         )
       )
@@ -526,10 +542,14 @@ async function mergeClient(old, incoming, a) {
     for (const p of Object.values(s.programmes)) {
       if (p.status !== "Active") continue;
       for (const call of p.calls || [])
-        if (globalThis.coachingTime.overlaps(proposed, call, 30, 20))
+        if (globalThis.coachingTime.overlaps(proposed, call, 15, 20))
           fail(409, "Slot overlaps a coaching call");
     }
-    s.workflow[id].booking = { date: proposed.date, time: proposed.time };
+    s.workflow[id].booking = {
+      date: proposed.date,
+      time: proposed.time,
+      duration: 15,
+    };
   }
   if (!access) return s;
   for (const section of ["records", "practiceTicks", "checkins"])
@@ -691,8 +711,27 @@ async function financialRecord(s, id, kind, stage) {
     [reference],
   );
   if (rows[0]) return crypt.open(rows[0].payload);
+  let displayReference = reference;
+  if (kind === "invoice" || kind === "receipt") {
+    const invoice =
+      kind === "receipt"
+        ? await financialRecord(s, id, "invoice", stage)
+        : null;
+    displayReference =
+      invoice?.reference ||
+      documentReference(
+        cfg.id,
+        new Set(
+          (await db.query("SELECT payload FROM financial_documents")).map(
+            (row) => crypt.open(row.payload).reference,
+          ),
+        ),
+      );
+  }
   const record = {
     kind,
+    storageId: reference,
+    invoiceReference: kind === "receipt" ? displayReference : undefined,
     formatting:
       kind === "agreement" && template?.terms === finalTerms
         ? { terms: template.formatting?.terms }
@@ -700,7 +739,9 @@ async function financialRecord(s, id, kind, stage) {
     isTest: !!l.isTest,
     business,
     client: l.first + " " + l.last,
-    reference,
+    reference: displayReference,
+    customerEmail: l.email,
+    customerPhone: l.phone,
     amount: stage === "deposit" ? cfg.deposit : cfg.balance,
     packageSnapshot: structuredClone(cfg),
     stage,
@@ -786,7 +827,7 @@ async function prepareEmail(id, actor) {
       text:
         record.status === "Receipt"
           ? `Hello ${record.customer.name},\n\nYour payment receipt is attached.\nReceived: ${record.currency} ${(record.receipt.amount / 100).toFixed(2)}\nRemaining: ${record.currency} ${((record.total - record.receipt.received) / 100).toFixed(2)}\n\n${record.business.name}`
-          : `Hello ${record.customer.name},\n\nPlease review your attached invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}.\nTotal: ${record.currency} ${(record.total / 100).toFixed(2)}\nDue: ${record.due}\n\n${record.payment}\n\n${record.business.name}`,
+          : `Hello ${record.customer.name},\n\nPlease review your attached invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}.\nTotal: ${record.currency} ${(record.total / 100).toFixed(2)}\nDue: ${record.due}\n\n${record.payment}${record.nextSteps ? "\n\n" + record.nextSteps : ""}\n\n${record.business.name}`,
       attachments: [],
     };
     for (const kind of record.status === "Receipt"
@@ -837,10 +878,18 @@ async function prepareEmail(id, actor) {
     return { status: "Already Sent" };
   if (previous[0]) {
     const pending = crypt.open(previous[0].payload);
-    if (pending.mail) return { mail: pending.mail };
+    if (pending.status === "Pending" && pending.mail)
+      return { mail: pending.mail };
   }
   let link = "";
-  if (e.type === "activation" || (e.type === "paid" && cfg.walkthrough)) {
+  if (
+    e.type === "activation" ||
+    (e.type === "paid" &&
+      cfg.walkthrough &&
+      state.workflow[e.client]?.walkthroughDone &&
+      state.programmes[e.client]?.agreed &&
+      state.intakes[e.client]?.submitted)
+  ) {
     await ensureAccounts(state);
     const a = await account(e.client);
     link = a?.password ? origin : await invitation(e.client);
@@ -873,7 +922,7 @@ async function prepareEmail(id, actor) {
     to: [lead.email],
     reply_to: process.env.EMAIL_REPLY_TO || "seekbyritu@gmail.com",
     subject: e.subject,
-    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Private link: " + link + "\n\n" : ""}${business.name}\n${business.publicAddress || ""}\nCurrency: ${business.currency}\n\nProgramme terms:\n${finalTerms}`,
+    text: `Hello ${lead.first},\n\n${cleanBody}\n\n${link ? "Private link: " + link + "\n\n" : ""}Rituparna Das\nSeek by Ritu\nseekbyritu@gmail.com${business.publicAddress ? "\n" + business.publicAddress : ""}`,
   };
   if (["slots", "slot-reminder"].includes(e.type))
     mail.text +=
@@ -889,10 +938,9 @@ async function prepareEmail(id, actor) {
   if (["first", "balance"].includes(e.type)) {
     const amount =
       e.type === "balance" ? cfg.balance : cfg.deposit || cfg.balance;
-    const link = globalThis.innerCodePayments.url(cfg.id, amount);
-    if (link && !mail.text.includes(link))
-      mail.text +=
-        "\n\n" + globalThis.innerCodePayments.instructions(cfg.id, amount);
+    const instructions = globalThis.programmeContent.payment(cfg.id, amount);
+    if (instructions && !mail.text.includes(instructions))
+      mail.text += "\n\nPayment Instructions\n" + instructions;
   }
   const stage =
     !cfg.deposit || ["balance", "paid"].includes(e.type)
@@ -1276,7 +1324,10 @@ const server = http.createServer(async (req, res) => {
               "Onboarding is complete. Use your account activation email to sign in.",
             );
           const cfg = globalThis.innerCodePackages.get(p);
-          const finalTerms = await approvedProgrammeTerms(cfg.id);
+          const finalTerms = (await approvedProgrammeTerms(cfg.id)).replaceAll(
+            "[Client Name]",
+            lead.first + " " + lead.last,
+          );
           const version = digest(finalTerms);
           if (req.method === "GET")
             return json(res, 200, {
@@ -1399,9 +1450,10 @@ const server = http.createServer(async (req, res) => {
           return await exclusive(async () => {
             const b = await body(req);
             let result;
-            if (path === "/api/billing/product")
+            if (path === "/api/billing/product") {
               result = await store.saveProduct(b);
-            else if (path === "/api/billing/draft")
+              await stateWrite(await stateRead());
+            } else if (path === "/api/billing/draft")
               result = await store.saveDocument(b, business);
             else if (path === "/api/billing/issue")
               result = await store.issue(b.id, b.version);
@@ -1438,7 +1490,7 @@ const server = http.createServer(async (req, res) => {
                 body:
                   record.status === "Receipt"
                     ? `To: ${record.customer.email}. Attached: verified payment receipt. Received: ${record.currency} ${(record.receipt.amount / 100).toFixed(2)}. Remaining: ${record.currency} ${((record.total - record.receipt.received) / 100).toFixed(2)}.`
-                    : `To: ${record.customer.email}. Attached: invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}. Total: ${record.currency} ${(record.total / 100).toFixed(2)}. Due: ${record.due}. ${record.payment}`,
+                    : `To: ${record.customer.email}. Attached: invoice${record.requiresAgreement === false ? "" : " and Service Agreement"}. Total: ${record.currency} ${(record.total / 100).toFixed(2)}. Due: ${record.due}. ${record.payment}${record.nextSteps ? "\n\n" + record.nextSteps : ""}`,
                 due: day(),
                 status: "Draft",
               };
@@ -1479,7 +1531,10 @@ const server = http.createServer(async (req, res) => {
           body:
             kind === "agreement"
               ? terms || packageTerms(cfg.id)
-              : "Payment instructions will be provided by Rituparna. This is a sample, not a payment request.",
+              : globalThis.programmeContent.payment(
+                  cfg.id,
+                  cfg.deposit || cfg.price,
+                ),
         });
         res.writeHead(200, {
           "Content-Type": "application/pdf",
@@ -1888,6 +1943,7 @@ const server = http.createServer(async (req, res) => {
             record = {
               ...record,
               body: signature.text,
+              formatting: signature.formatting,
               acknowledgement: { name: signature.name, at: signature.at },
               reference:
                 "SEEK-ACK-" + signature.version.slice(0, 12).toUpperCase(),
@@ -2021,6 +2077,8 @@ const server = http.createServer(async (req, res) => {
       "/calendar.js": "calendar.js",
       "/packages.js": "packages.js",
       "/payment-links.js": "payment-links.js",
+      "/programme-content.js": "programme-content.js",
+      "/date-fields.js": "date-fields.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
       "/favicon.ico": "assets/seekbyritu-logo.png",
       "/apple-touch-icon.png": "assets/seekbyritu-logo.png",

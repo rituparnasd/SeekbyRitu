@@ -58,7 +58,7 @@ test("catalogue snapshots, integer money, issue/revision immutability and persis
     assert.equal(d.total, 6192);
     await assert.rejects(() => store.issue(d.id, d.version - 1), /changed/);
     const issued = await db.transaction(() => store.issue(d.id, d.version));
-    assert.match(issued.reference, /^SBR-\d{4}-00001$/);
+    assert.match(issued.reference, /^SBR-[A-Z]{6}-[A-Z]{6}$/);
     await assert.rejects(
       () =>
         store.saveDocument({ ...request, id: d.id, version: issued.version }),

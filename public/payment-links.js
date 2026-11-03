@@ -11,6 +11,8 @@
     currency === "CAD" ? links[packageId + ":" + amount] || "" : "";
   const instructions = (packageId, amount, currency = "CAD") => {
     const link = url(packageId, amount, currency);
+    if (currency === "CAD" && globalThis.programmeContent?.get(packageId))
+      return globalThis.programmeContent.payment(packageId, Number(amount));
     return link
       ? `Pay CAD ${Number(amount).toFixed(2)} securely via Stripe: ${link}. Use the same email address as your enrolment. Access follows payment verification and programme readiness.`
       : "";

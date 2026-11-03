@@ -22,7 +22,9 @@ test("Stripe checkout links match exact CAD package instalments", () => {
       ],
     };
     const invoice = documentInput(body, initialProducts("Draft"), {});
-    assert.match(invoice.payment, new RegExp(code));
+    if (id === "inner-code")
+      assert.match(invoice.payment, /Interac e-Transfer/);
+    else assert.match(invoice.payment, new RegExp(code));
     assert.throws(
       () =>
         documentInput(
@@ -44,8 +46,11 @@ test("Stripe checkout links match exact CAD package instalments", () => {
       outbox: {},
     };
     reconcileWorkflow(s, "2026-11-03");
-    if (amount !== 350)
-      assert(s.outbox["a:first"].body.includes(payments.url(id, amount)));
+    if (amount !== 350) {
+      if (id === "inner-code")
+        assert.match(s.outbox["a:first"].body, /Interac e-Transfer/);
+      else assert(s.outbox["a:first"].body.includes(payments.url(id, amount)));
+    }
   }
   assert.equal(payments.url("inner-code", 500), "");
   assert.equal(payments.url("custom", 50), "");

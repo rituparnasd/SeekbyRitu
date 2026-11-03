@@ -271,6 +271,30 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       .filter({ hasText: "Fixture Workshop" })
       .getAttribute("value");
     await page.locator("#item-product-0").selectOption(workshopId);
+    assert.equal(
+      await page.locator("#billing-issued").getAttribute("type"),
+      "date",
+    );
+    assert.equal(
+      await page
+        .getByRole("button", {
+          name: "Choose Issue Date from calendar",
+          exact: true,
+        })
+        .count(),
+      1,
+    );
+    assert.equal(
+      await page
+        .getByRole("button", {
+          name: "Choose Payment Due from calendar",
+          exact: true,
+        })
+        .count(),
+      1,
+    );
+    await page.locator("#billing-issued").fill("2026-11-03");
+    await page.locator("#billing-agreement-date").fill("2026-11-03");
     await page.locator("#billing-name").fill("Invoice Fixture");
     await page.locator("#billing-email").fill("invoice@example.test");
     await page

@@ -12,9 +12,9 @@ The health endpoint returns HTTP 503 if storage is missing or disconnected. A su
 
 ## Service Agreements
 
-Products & Services → Edit Defaults for each package → complete and review its Service Agreement → Save Defaults with approval checked. Draft markers such as “must be agreed before signing” block approval and issuing. There is no automatic approval of unresolved financial or privacy terms.
+The owner supplied final Canada, India Guided and India Self-Guided content. On the next production deployment, a one-time migration installs these reviewed defaults and preserves prior catalogue versions. Products & Services remains the place to edit future offers, descriptions, agreements and What Happens Next emails. Previously issued/signed records retain their agreed content.
 
-See [Final business review](LAUNCH-DECISIONS.md) for the remaining business decisions and proposed wording. The confirmed Premium threshold is 95%, with eligible deposit return within five business days. Existing issued documents retain their snapshots; issue a revision rather than silently altering a signed document.
+Invoices, agreements and receipts now use the owner's supplied PDF pattern. The original coach signature is included in agreements. Client acknowledgements are recorded separately; they are not generated from the coach signature. Native date controls expose a Calendar button for choosing issue, due and coach-agreement dates.
 
 ## Email delivery test
 
@@ -24,9 +24,11 @@ Check Inbox and Spam for that exact reference, then click I Received This Test E
 
 ## Payments
 
-The four owner-provided checkout links are configured in `public/payment-links.js`: Self-Guided CAD 50, Guided Coaching CAD 100, Premium deposit CAD 150 and Premium balance CAD 350. Programme payment-request emails and new invoices use the matching link. Billing drafts select links only for a single matching CAD package instalment. A changed price, quantity, discount or tax requires matching payment instructions. There is no CAD 500 checkout link, so the CAD 150 link is never used for a CAD 500 invoice.
+Current owner-approved defaults: Canada CAD 150 deposit and CAD 350 balance by Interac e-Transfer to seekbyritu@gmail.com. India Guided CAD 100 and India Self-Guided CAD 50 use their supplied Stripe links. The earlier Canada Stripe links remain available for explicit custom use; they are not the default Canada payment instructions.
 
-Open each Stripe checkout page and verify its product, CAD currency and amount before sharing it. Confirm payments in Stripe before recording the matching client payment in the CRM. Payment Links do not install webhooks or automatically verify payments. No real charge was made during testing.
+First-step emails attach the relevant Service Agreement and invoice, and include product-specific What Happens Next instructions. Plan preparation is 3–5 business days; Canada plan review is 15 minutes, followed by the separate CAD 350 request after approval. Payment verification remains manual. Payment Links do not install webhooks. No real charge was made during testing.
+
+New references are alphabetical and random (IC-CA / IC-IG / IC-IS, or SBR for another offer). Existing issued numbers are unchanged. Invoices are payment requests; receipts require separately verified payments.
 
 ## Optional branded URL
 
@@ -36,6 +38,6 @@ For crm.seekbyritu.com: add it in Render → Settings → Custom Domains, then c
 
 ## Verification evidence
 
-The launch fixes pass 37 local tests, covering authentication/MFA, client isolation, private onboarding, package entitlements, invoices/receipts, payment-link mappings, draft approval, inbox-verification state and responsive coach/client browser journeys. Provider responses in tests are simulated; they do not prove actual Gmail delivery or Stripe checkout configuration.
+The launch fixes pass 50 local tests, covering authentication/MFA, client isolation, private onboarding, package entitlements, invoices/receipts, payment-link mappings, draft approval, inbox-verification state and responsive coach/client browser journeys. Provider responses in tests are simulated; they do not prove actual Gmail delivery or Stripe checkout configuration.
 
 The owner previously confirmed live encrypted storage on build 02c706c6f971. That result does not verify subsequent deployments. This workspace has no configured Render/GoDaddy credentials and its current outbound policy excludes the Render host. Production deployment and DNS changes cannot be independently performed or verified here. GitHub publication is separate from a live Render deployment.

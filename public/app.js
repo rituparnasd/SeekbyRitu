@@ -1468,7 +1468,7 @@ function taskList() {
       continue;
     }
     if (!w.slots?.length) {
-      add("slots", "Offer Four Walkthrough Slots", day, "work");
+      add("slots", "Offer Four Plan Review Slots", day, "work");
       continue;
     }
     if (!w.booking) {
@@ -1478,7 +1478,7 @@ function taskList() {
     if (!w.walkthroughDone) {
       add(
         "walkthrough",
-        "Complete Walkthrough & Record Changes",
+        "Complete Plan Review & Record Changes",
         w.booking.date,
         "work",
       );
@@ -1557,16 +1557,16 @@ function workflowControls() {
   if (!c().id) return "<p>No clients yet. Register a lead to begin.</p>";
   const w = workflow(c().id),
     intake = state.intakes[c().id];
-  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · Three business days · Weekends excluded</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || addBusinessDays(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (Calgary Time)</label><input type="date" name="date" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).date : day}" required><input type="time" name="time" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).time : "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button>${packageFor().walkthrough ? `<form id="offer-slots-form"><h3>Offer Four Slots</h3><p class="small muted">Enter Calgary times. Both Calgary and India times will be shown in the invitation.</p>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).date : dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).time : "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>` : ""}${w.booking && packageFor().walkthrough ? `<div class="note">Walkthrough: ${esc(coachingTime.display(w.booking))} · 30 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Walkthrough Completed ✓" : "Complete Walkthrough"}</button>` : ""}`;
+  return `<p class="small">Plan deadline: <strong>${w.planDue || "Created after questionnaire submission"}</strong> · 3–5 business days · Weekends excluded</p><form id="plan-deadline-form"><label>Plan Deadline</label><input type="date" name="due" value="${w.planDue || addBusinessDays(day, 3)}" required><button class="btn subtle">Revise Deadline</button></form><form id="work-block-form"><label>Plan Work Block (Calgary Time)</label><input type="date" name="date" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).date : day}" required><input type="time" name="time" value="${w.workBlock ? coachingTime.local(coachingTime.utc(w.workBlock)).time : "09:00"}" required><label>Minutes</label><input type="number" name="duration" min="15" max="240" value="${w.workBlock?.duration || 60}" required><button class="btn subtle">Save Work Block</button></form><br><button class="btn primary" data-plan-ready ${!intake?.submitted ? "disabled" : ""}>${w.planReady ? "Plan Ready ✓" : "Mark Plan Ready"}</button>${packageFor().walkthrough ? `<form id="offer-slots-form"><h3>Offer Four Slots</h3><p class="small muted">Enter Calgary times. Both Calgary and India times will be shown in the invitation.</p>${Array.from({ length: 4 }, (_, i) => `<div class="slot-row"><input type="date" name="date${i}" aria-label="Slot ${i + 1} date" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).date : dateAdd(day, i + 1)}"><input type="time" name="time${i}" aria-label="Slot ${i + 1} time" required value="${w.slots?.[i] ? coachingTime.local(coachingTime.utc(w.slots[i])).time : "14:00"}"></div>`).join("")}<button class="btn subtle" ${!w.planReady ? "disabled" : ""}>Save & Queue Invitation</button></form>` : ""}${w.booking && packageFor().walkthrough ? `<div class="note">Plan Review: ${esc(coachingTime.display(w.booking))} · 15 minutes</div><button class="btn primary" data-walkthrough-done>${w.walkthroughDone ? "Plan Review Completed ✓" : "Complete Plan Review"}</button>` : ""}`;
 }
 function bookingPage() {
   const w = workflow(c().id);
   return (
     title(
-      "Walkthrough Booking",
-      "Choose one coach-offered slot for a 30-minute discussion. Your plan is not emailed.",
+      "Plan Review Booking",
+      "Choose one coach-offered slot for a 15-minute discussion. Your plan is not emailed.",
     ) +
-    `<div class="card">${w.booking ? `<h2>Booking Confirmed</h2><p>${esc(coachingTime.display(w.booking))} · 30 minutes</p>` : w.slots?.length ? w.slots.map((slot, i) => `<div class="list-item row"><span>${esc(coachingTime.display(slot))}</span><button class="btn primary" data-book-slot="${i}" ${slotAvailable(c().id, slot.date, slot.time, 30) ? "" : "disabled"}>Choose Slot</button></div>`).join("") : "<p>Your coach will offer four slots when your plan is ready.</p>"}</div>`
+    `<div class="card">${w.booking ? `<h2>Booking Confirmed</h2><p>${esc(coachingTime.display(w.booking))} · 15 minutes</p>` : w.slots?.length ? w.slots.map((slot, i) => `<div class="list-item row"><span>${esc(coachingTime.display(slot))}</span><button class="btn primary" data-book-slot="${i}" ${slotAvailable(c().id, slot.date, slot.time, 15) ? "" : "disabled"}>Choose Slot</button></div>`).join("") : "<p>Your coach will offer four slots when your plan is ready.</p>"}</div>`
   );
 }
 function calendarEvents() {
@@ -1594,8 +1594,8 @@ function calendarEvents() {
               {
                 ...w.booking,
                 id: x.id,
-                label: "Plan Walkthrough",
-                duration: 30,
+                label: "Plan Plan Review",
+                duration: 15,
               },
             ]
           : []),
@@ -1682,7 +1682,7 @@ function bindTasks() {
       slots.some(
         (s) =>
           coachingTime.local(coachingTime.utc(s)).date < day ||
-          !slotAvailable(c().id, s.date, s.time, 30, "Plan Walkthrough"),
+          !slotAvailable(c().id, s.date, s.time, 15, "Plan Plan Review"),
       )
     ) {
       toast("Offer four distinct, available slots dated today or later.");
@@ -1708,7 +1708,7 @@ function bindTasks() {
           w.booking ||
           !slot ||
           coachingTime.local(coachingTime.utc(slot)).date < day ||
-          !slotAvailable(c().id, slot.date, slot.time, 30)
+          !slotAvailable(c().id, slot.date, slot.time, 15)
         ) {
           toast("This slot is no longer available.");
           return;
@@ -1716,7 +1716,7 @@ function bindTasks() {
         w.booking = { ...slot };
         save();
         render();
-        toast("Walkthrough booked in the internal calendar.");
+        toast("Plan Review booked in the internal calendar.");
       }),
   );
   $("[data-walkthrough-done]")?.addEventListener("click", () => {
@@ -1726,7 +1726,7 @@ function bindTasks() {
       save();
       render();
       toast(
-        "Walkthrough complete. Confirm plan agreement in Leads & Enrollment.",
+        "Plan Review complete. Confirm plan agreement in Leads & Enrollment.",
       );
     }
   });
@@ -1790,6 +1790,7 @@ function agreement() {
   );
 }
 function bindServerActions() {
+  dateFields.mount();
   $("#create-test-client")?.addEventListener("click", async () => {
     try {
       await saveChain;
@@ -2041,7 +2042,7 @@ function documentsPage() {
       "Documents",
       "Branded drafts for review. Client-specific documents are generated from Leads & Enrollment.",
     ) +
-    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. Plan preparation takes three business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
+    `<div class="card">${files.map(([file, label]) => `<div class="list-item row"><h3>${label}</h3><a class="btn" href="/api/template/${encodeURIComponent(file)}">Download Draft PDF</a></div>`).join("")}</div><div class="note">Do not send or sign until refund, cancellation, scoring, payment and privacy terms are finalised. Plan preparation takes 3–5 business days after submitted answers. Saturday and Sunday are excluded; public holidays are not currently excluded.</div>`
   );
 }
 if (

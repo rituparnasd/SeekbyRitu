@@ -1427,3 +1427,27 @@ details.card[open] > summary {
   max-height: 240px;
   overflow-y: auto;
 }
+.date-picker-field {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  min-width: 0;
+}
+.date-picker-field input[type="date"] {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.date-picker-button {
+  border: 1px solid #dce3dd;
+  border-radius: 6px;
+  background: #f7f9f8;
+  color: #103f34;
+  padding: 8px 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.date-picker-button:focus-visible {
+  outline: 2px solid #103f34;
+}

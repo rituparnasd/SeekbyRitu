@@ -1,8 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import "../public/packages.js";
+import "../public/payment-links.js";
+import "../public/programme-content.js";
 import "../public/calendar.js";
 import { packageTerms } from "../lib/package-terms.mjs";
 import { pdfDocument } from "../lib/documents.mjs";
+import { documentReference } from "../lib/document-references.mjs";
 const dir = new URL("../docs/previews/packages/", import.meta.url);
 await mkdir(dir, { recursive: true });
 const business = {
@@ -15,7 +18,7 @@ for (const cfg of globalThis.innerCodePackages.all) {
     const body =
       kind === "agreement"
         ? packageTerms(cfg.id)
-        : "Payment method and receiving instructions will be provided by Rituparna. Review the final Service Agreement before paying.";
+        : globalThis.programmeContent.payment(cfg.id, cfg.deposit || cfg.price);
     const buffer = await pdfDocument({
       kind,
       isTest: true,
@@ -24,7 +27,10 @@ for (const cfg of globalThis.innerCodePackages.all) {
       stage: cfg.deposit ? "deposit" : "balance",
       business,
       client: "Client Name",
-      reference: "PREVIEW-" + cfg.id,
+      customerEmail: "client@example.com",
+      customerPhone: "Client phone",
+      agreementDate: globalThis.coachingTime.today(),
+      reference: documentReference(cfg.id),
       amount: cfg.deposit || cfg.price,
       date:
         globalThis.coachingTime?.today?.() ||
@@ -35,5 +41,5 @@ for (const cfg of globalThis.innerCodePackages.all) {
   }
 }
 console.log(
-  "Generated six package-specific design previews. Drafts are not approved for sending.",
+  "Generated six package-specific samples. These are not real invoices or signed client agreements.",
 );

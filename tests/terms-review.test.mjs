@@ -10,8 +10,11 @@ import {
   productInput,
   documentInput,
 } from "../lib/billing.mjs";
-test("all package review drafts remain blocked even when an approval box is checked", () => {
+test("owner-supplied final package terms pass; newly added unfinished terms still block approval", () => {
   for (const product of initialProducts(packageTerms("inner-code"))) {
+    assert.equal(hasUnresolvedTerms(product.terms), false);
+    assert.equal(productInput({ ...product, approved: true }).approved, true);
+    product.terms += "\nCancellation must be agreed before signing.";
     assert(hasUnresolvedTerms(product.terms));
     assert.throws(
       () => productInput({ ...product, approved: true }),

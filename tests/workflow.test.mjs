@@ -10,7 +10,7 @@ test("server event workflow creates deadlines and idempotent messages without an
     outbox: {},
   };
   reconcileWorkflow(s, "2026-01-01");
-  assert.equal(s.workflow.a.planDue, "2026-01-06");
+  assert.equal(s.workflow.a.planDue, "2026-01-08");
   assert(s.outbox["a:answers"]);
   const n = Object.keys(s.outbox).length;
   reconcileWorkflow(s, "2026-01-01");
@@ -19,9 +19,9 @@ test("server event workflow creates deadlines and idempotent messages without an
   s.programmes.a.agreed = true;
   s.programmes.a.balance = true;
   reconcileWorkflow(s, "2026-01-03");
-  assert.equal(s.programmes.a.start, "2026-01-04");
+  assert.equal(s.programmes.a.start, "2026-01-05");
   assert.equal(s.programmes.a.calls.length, 10);
-  assert.equal(s.outbox["a:welcome"].due, "2026-01-04");
+  assert.equal(s.outbox["a:welcome"].due, "2026-01-05");
 });
 
 test("three business days skips weekends and does not change programme-day arithmetic", () => {
@@ -92,7 +92,7 @@ test("activation also respects walkthroughs and coach preparation blocks", () =>
     outbox: {},
   });
   for (const busy of [
-    { booking: { date: "2026-10-04", time: "18:00" } },
+    { booking: { date: "2026-10-04", time: "18:10" } },
     { workBlock: { date: "2026-10-04", time: "18:00", duration: 60 } },
   ]) {
     const s = make(busy);

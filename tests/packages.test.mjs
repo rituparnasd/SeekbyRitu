@@ -31,7 +31,7 @@ test("package prices, calls and the final 95% Premium rule are exact", () => {
     packageTerms("inner-code-self-guided"),
     /No private coaching calls/,
   );
-  assert.match(packageTerms("inner-code-guided"), /six private 20-minute/);
+  assert.match(packageTerms("inner-code-guided"), /Six private 20-minute/);
 });
 test("India packages activate after full payment and plan preparation, with zero or six calls and no Premium payment demands", () => {
   for (const cfg of p.all.filter((c) => !c.deposit)) {
