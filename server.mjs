@@ -1994,6 +1994,9 @@ const server = http.createServer(async (req, res) => {
       "/packages.js": "packages.js",
       "/payment-links.js": "payment-links.js",
       "/assets/seekbyritu-logo.png": "assets/seekbyritu-logo.png",
+      "/favicon.ico": "assets/seekbyritu-logo.png",
+      "/apple-touch-icon.png": "assets/seekbyritu-logo.png",
+      "/apple-touch-icon-precomposed.png": "assets/seekbyritu-logo.png",
       "/assets/fonts/NotoSerif-Regular.ttf":
         "assets/fonts/NotoSerif-Regular.ttf",
       "/assets/fonts/OpenSans-Regular.ttf": "assets/fonts/OpenSans-Regular.ttf",
