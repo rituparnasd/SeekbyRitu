@@ -70,6 +70,12 @@
   globalThis.innerCodePackages = {
     all: packages,
     get,
+    fullPayment: (p) =>
+      get(p).id === "inner-code" && p?.paymentOption === "full",
+    firstAmount: (p) =>
+      get(p).id === "inner-code" && p?.paymentOption === "full"
+        ? 500
+        : get(p).deposit || get(p).price,
     paid: (p) => {
       const c = get(p);
       return c.deposit ? !!p?.deposit && !!p?.balance : !!p?.balance;

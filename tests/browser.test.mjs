@@ -443,12 +443,57 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
       phone: "555",
     }))
       await page.locator("#lead-" + n).fill(v);
+    await page.locator('[name="paymentOption"]').selectOption("full");
     await page.locator("#lead-form button").click();
     await page
       .getByRole("heading", { name: "Temporary Fixture", exact: true })
       .waitFor();
     await page.evaluate(() => saveChain);
     assert.match(await page.locator("#save-status").textContent(), /Saved/);
+    assert.equal(
+      await page.locator("#client-payment-option").inputValue(),
+      "full",
+    );
+    const unpaidReceipt = await page.request.get(
+      origin +
+        "/api/pdf/receipt?client=" +
+        (await page.evaluate(() => c().id)) +
+        "&stage=full",
+    );
+    assert.equal(unpaidReceipt.status(), 409);
+    await page
+      .getByRole("button", {
+        name: "Record Verified CAD 500 Payment",
+        exact: true,
+      })
+      .click();
+    await page
+      .locator('#verify-payment-form [name="method"]')
+      .fill("Interac e-Transfer");
+    await page
+      .locator('#verify-payment-form [name="reference"]')
+      .fill("TEST-FULL-500");
+    await page.locator('#verify-payment-form input[type="checkbox"]').check();
+    await page
+      .getByRole("button", { name: "Confirm Record", exact: true })
+      .click();
+    await page.evaluate(() => saveChain);
+    const fullState = await page.evaluate(() => ({
+      p: programme(c().id),
+      out: state.outbox[c().id + ":paid"],
+    }));
+    assert.equal(fullState.p.full, true);
+    assert.equal(fullState.p.status, "Not Activated");
+    assert.match(fullState.out.body, /CAD 500 payment/);
+    const receipt = await page.request.get(
+      origin +
+        "/api/pdf/receipt?client=" +
+        (await page.evaluate(() => c().id)) +
+        "&stage=full",
+    );
+    assert.equal(receipt.status(), 200);
+    assert.equal(receipt.headers()["content-type"], "application/pdf");
+
     await page.reload();
     await page.locator('[data-view="clients"]').first().click();
     await page

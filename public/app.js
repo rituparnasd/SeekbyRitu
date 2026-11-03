@@ -856,7 +856,7 @@ function leadsPage() {
       )
       .join(
         "",
-      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><div class="field"><label for="lead-package">Inner Code Package</label><select id="lead-package" name="packageId">${innerCodePackages.all.map((p) => `<option value="${p.id}" ${p.id === "inner-code" ? "selected" : ""}>${p.name} · CAD ${p.price} · ${p.market}</option>`).join("")}</select></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
+      )}</div><div class="field"><label>Inquiry Source</label><select name="source"><option>WhatsApp</option><option>Email</option><option>Other</option></select></div><div class="field"><label for="lead-package">Inner Code Package</label><select id="lead-package" name="packageId">${innerCodePackages.all.map((p) => `<option value="${p.id}" ${p.id === "inner-code" ? "selected" : ""}>${p.name} · CAD ${p.price} · ${p.market}</option>`).join("")}</select></div><div class="field"><label>Canada Payment Option</label><select name="paymentOption"><option value="standard">Standard · CAD 150 + CAD 350</option><option value="full">Canada Only · CAD 500 Full Payment</option></select><p class="small muted">India packages keep their existing full-payment process.</p></div><button class="btn primary">Register Lead</button><div class="note">Saving a client prepares the first email for review. Nothing is sent yet.</div></form>`
   );
 }
 function calendarPage() {
@@ -1036,6 +1036,10 @@ function bindWorkflow() {
     const cfg = innerCodePackages.get(f.get("packageId") || "inner-code");
     state.programmes[l.id] = {
       packageId: cfg.id,
+      paymentOption:
+        cfg.id === "inner-code" && f.get("paymentOption") === "full"
+          ? "full"
+          : "standard",
       packageSnapshot: structuredClone(cfg),
       status: "Not Activated",
       start: day,
@@ -1436,7 +1440,7 @@ function taskList() {
       if (l)
         add(
           "payment",
-          `Waiting For CAD ${cfg.deposit || cfg.price} Payment`,
+          `Waiting For CAD ${innerCodePackages.firstAmount(p)} Payment`,
           day,
           "clienthub",
           true,

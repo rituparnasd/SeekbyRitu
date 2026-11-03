@@ -56,11 +56,20 @@ function clientStage(id) {
       payment: "balance",
     };
   if (cfg.deposit && !p.deposit)
-    return { label: "Waiting For CAD 150 Deposit", payment: "deposit" };
+    return {
+      label: innerCodePackages.fullPayment(p)
+        ? "Waiting For CAD 500 Full Payment"
+        : "Waiting For CAD 150 Deposit",
+      payment: innerCodePackages.fullPayment(p) ? "full" : "deposit",
+    };
   if (!state.intakes[id]?.submitted)
     return {
       label: "Waiting For Questionnaire",
-      email: id + (cfg.deposit ? ":deposit" : ":paid"),
+      email:
+        id +
+        (cfg.deposit && !innerCodePackages.fullPayment(p)
+          ? ":deposit"
+          : ":paid"),
     };
   if (!w.planReady)
     return { label: "Prepare Personalised Plan", view: "habits" };
@@ -137,7 +146,7 @@ function clientHub() {
       `Everything for this client · ${cfg.name} · CAD ${cfg.price}`,
       `<button class="btn" data-preview="${x.id}">Preview Client View</button>`,
     ) +
-    `<div class="hero"><div class="eyebrow">Next Step</div><h2>${next.label}</h2>${main}</div><ol class="journey-steps">${(cfg.walkthrough ? ["Deposit", "Questionnaire", "Plan", "Plan Review", "Balance"] : ["Payment", "Questionnaire", "Plan", "Activation"]).map((l, i) => `<li class="${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "step-done" : ""}">${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "✓ " : ""}${l}</li>`).join("")}</ol><div id="client-email-panel"></div><div id="payment-panel"></div><div class="grid"><section><div class="card"><h2>Client Details</h2><p>${esc(state.leads.find((l) => l.id === x.id)?.email || "")}</p><div class="actions"><button class="btn" data-view="profile">Profile & Original Answers</button><button class="btn" data-view="onboarding">Questionnaire</button><button class="btn" id="copy-onboarding-link">Copy Private Onboarding Link</button></div></div><div class="card"><h2>Payments & Documents</h2><p class="small muted">One Service Agreement defines the service. Invoices request payment. Receipts confirm verified payments.</p><div class="actions"><button class="btn primary" data-client-billing="${x.id}">Open Billing For This Client</button></div><details><summary>Inner Code Payment History</summary><p>${cfg.deposit ? `Deposit: ${p.deposit ? "CAD 150 verified" : "Not received"} · ` : ""}Payment: ${p.balance ? `CAD ${cfg.balance} verified` : "Not received"}</p><div class="actions">${p.deposit ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=deposit">Deposit Receipt</a>` : ""}${p.balance ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=balance">Balance Receipt</a>` : ""}</div></details></div></section><aside><details class="card" id="booking-controls" ${next.booking || next.walkthrough ? "open" : ""}><summary>Plan Deadline & Plan Review</summary>${workflowControls()}${w.slots?.length && !w.booking ? `<form id="coach-booking-form"><label for="coach-slot">Client’s Chosen Slot</label><select id="coach-slot" name="slot">${w.slots.map((s, i) => `<option value="${i}">${esc(coachingTime.display(s))}</option>`).join("")}</select><button class="btn">Confirm Booking</button></form>` : ""}</details><details class="card"><summary>All Emails For This Client</summary>${
+    `<div class="hero"><div class="eyebrow">Next Step</div><h2>${next.label}</h2>${main}</div><ol class="journey-steps">${(cfg.walkthrough ? [innerCodePackages.fullPayment(p) ? "Full Payment" : "Deposit", "Questionnaire", "Plan", "Plan Review", innerCodePackages.fullPayment(p) ? "Payment Complete" : "Balance"] : ["Payment", "Questionnaire", "Plan", "Activation"]).map((l, i) => `<li class="${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "step-done" : ""}">${(cfg.walkthrough ? doneSteps[i] : [p.balance, !!state.intakes[x.id]?.submitted, !!w.planReady, p.status === "Active"][i]) ? "✓ " : ""}${l}</li>`).join("")}</ol><div id="client-email-panel"></div><div id="payment-panel"></div><div class="grid"><section><div class="card"><h2>Client Details</h2><p>${esc(state.leads.find((l) => l.id === x.id)?.email || "")}</p><div class="actions"><button class="btn" data-view="profile">Profile & Original Answers</button><button class="btn" data-view="onboarding">Questionnaire</button><button class="btn" id="copy-onboarding-link">Copy Private Onboarding Link</button></div></div><div class="card"><h2>Payments & Documents</h2>${cfg.id === "inner-code" ? `<label>Payment Option</label><select id="client-payment-option" ${p.deposit || p.balance ? "disabled" : ""}><option value="standard" ${!innerCodePackages.fullPayment(p) ? "selected" : ""}>Standard · CAD 150 + CAD 350</option><option value="full" ${innerCodePackages.fullPayment(p) ? "selected" : ""}>CAD 500 Full Payment</option></select><p class="small muted">Programme and refund terms remain in the Service Agreement.</p>${innerCodePackages.fullPayment(p) ? `<a class="btn" href="/api/pdf/invoice?client=${x.id}&stage=full">CAD 500 Invoice</a>${p.balance ? `<a class="btn" href="/api/pdf/receipt?client=${x.id}&stage=full">CAD 500 Paid In Full Receipt</a>` : `<button class="btn" data-payment="${x.id}" data-kind="full">Record Verified CAD 500 Payment</button>`}` : ""}` : ""}<p class="small muted">One Service Agreement defines the service. Invoices request payment. Receipts confirm verified payments.</p><div class="actions"><button class="btn primary" data-client-billing="${x.id}">Open Billing For This Client</button></div><details><summary>Inner Code Payment History</summary><p>${innerCodePackages.fullPayment(p) ? `Full payment: ${p.balance ? "CAD 500 verified" : "Not received"}` : `${cfg.deposit ? `Deposit: ${p.deposit ? "CAD 150 verified" : "Not received"} · ` : ""}Payment: ${p.balance ? `CAD ${cfg.balance} verified` : "Not received"}`}</p><div class="actions">${p.deposit && !innerCodePackages.fullPayment(p) ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=deposit">Deposit Receipt</a>` : ""}${p.balance && !innerCodePackages.fullPayment(p) ? `<a class="btn subtle" href="/api/pdf/receipt?client=${x.id}&stage=balance">Balance Receipt</a>` : ""}</div></details></div></section><aside><details class="card" id="booking-controls" ${next.booking || next.walkthrough ? "open" : ""}><summary>Plan Deadline & Plan Review</summary>${workflowControls()}${w.slots?.length && !w.booking ? `<form id="coach-booking-form"><label for="coach-slot">Client’s Chosen Slot</label><select id="coach-slot" name="slot">${w.slots.map((s, i) => `<option value="${i}">${esc(coachingTime.display(s))}</option>`).join("")}</select><button class="btn">Confirm Booking</button></form>` : ""}</details><details class="card"><summary>All Emails For This Client</summary>${
       Object.values(state.outbox)
         .filter((e) => e.client === x.id)
         .map(
@@ -231,6 +240,12 @@ function bindSimpleWorkspace() {
         };
       }),
   );
+  $("#client-payment-option")?.addEventListener("change", async (e) => {
+    programme(c().id).paymentOption = e.target.value;
+    save();
+    await saveChain;
+    render();
+  });
   document.querySelectorAll("[data-payment]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -240,12 +255,16 @@ function bindSimpleWorkspace() {
         if (p[kind]) return toast("Already recorded.");
         const root = $("#payment-panel");
         if (!root) return;
-        root.innerHTML = `<form id="verify-payment-form" class="card"><h2>${kind === "agreed" ? "Record Plan Approval" : "Record Verified " + (kind === "deposit" ? `CAD ${packageFor(id).deposit} Deposit` : `CAD ${packageFor(id).balance} ${packageFor(id).deposit ? "Balance" : "Payment"}`)}</h2><p>Record this only after ${kind === "agreed" ? "the client has approved the discussed plan." : "you have checked that the payment reached your account."}</p>${kind !== "agreed" ? '<label>Payment Date</label><input name="date" type="date" required value="' + day + '"><label>Payment Method</label><input name="method" required maxlength="100"><label>Transaction Reference</label><input name="reference" required maxlength="200">' : ""}<label><input type="checkbox" required> I have verified this.</label><button class="btn primary">Confirm Record</button></form>`;
+        root.innerHTML = `<form id="verify-payment-form" class="card"><h2>${kind === "agreed" ? "Record Plan Approval" : "Record Verified " + (kind === "full" ? "CAD 500 Full Payment" : kind === "deposit" ? `CAD ${packageFor(id).deposit} Deposit` : `CAD ${packageFor(id).balance} ${packageFor(id).deposit ? "Balance" : "Payment"}`)}</h2><p>Record this only after ${kind === "agreed" ? "the client has approved the discussed plan." : "you have checked that the payment reached your account."}</p>${kind !== "agreed" ? '<label>Payment Date</label><input name="date" type="date" required value="' + day + '"><label>Payment Method</label><input name="method" required maxlength="100"><label>Transaction Reference</label><input name="reference" required maxlength="200">' : ""}<label><input type="checkbox" required> I have verified this.</label><button class="btn primary">Confirm Record</button></form>`;
         root.scrollIntoView({ behavior: "smooth", block: "start" });
         $("#verify-payment-form").onsubmit = async (ev) => {
           ev.preventDefault();
           const f = new FormData(ev.target);
           p[kind] = true;
+          if (kind === "full") {
+            p.deposit = true;
+            p.balance = true;
+          }
           p.paymentDetails ??= {};
           p.paymentDetails[kind] = {
             date: f.get("date"),

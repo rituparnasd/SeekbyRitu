@@ -149,3 +149,53 @@ test("walkthrough and activation messages show both zones with dates, including 
   assert.match(s.outbox["a:paid"].body, /Calgary Time/);
   assert.match(s.outbox["a:paid"].body, /India Time/);
 });
+
+test("Canada optional full payment preserves review gate and never requests another balance", () => {
+  const s = {
+    leads: [{ id: "full", first: "Client" }],
+    programmes: {
+      full: {
+        packageId: "inner-code",
+        paymentOption: "full",
+        status: "Not Activated",
+      },
+    },
+    intakes: {},
+    workflow: {},
+    outbox: {},
+  };
+  reconcileWorkflow(s, "2026-11-03");
+  assert.match(s.outbox["full:first"].body, /full payment is CAD 500/);
+  assert.match(s.outbox["full:first"].body, /e-Transfer/);
+  Object.assign(s.programmes.full, {
+    full: true,
+    deposit: true,
+    balance: true,
+    verifiedAt: {
+      full: "2026-11-03T18:00:00Z",
+      balance: "2026-11-03T18:00:00Z",
+    },
+  });
+  reconcileWorkflow(s, "2026-11-03");
+  assert.equal(s.programmes.full.status, "Not Activated");
+  assert.match(s.outbox["full:paid"].body, /CAD 500 payment/);
+  assert.match(s.outbox["full:paid"].body, /before account activation/);
+  assert.equal(s.outbox["full:deposit"], undefined);
+  s.intakes.full = { submitted: "2026-11-04T18:00:00Z" };
+  Object.assign(s.workflow.full, {
+    planReady: "2026-11-09",
+    walkthroughDone: "2026-11-10",
+  });
+  s.programmes.full.agreed = true;
+  s.programmes.full.verifiedAt.agreed = "2026-11-10T20:00:00Z";
+  reconcileWorkflow(s, "2026-11-10");
+  assert.equal(s.programmes.full.status, "Active");
+  assert.equal(s.programmes.full.start, "2026-11-11");
+  assert.equal(s.programmes.full.calls.length, 10);
+  assert.equal(s.outbox["full:balance"], undefined);
+  assert(s.outbox["full:activation"]);
+  assert.equal(
+    globalThis.innerCodePackages.get(s.programmes.full).refundThreshold,
+    95,
+  );
+});

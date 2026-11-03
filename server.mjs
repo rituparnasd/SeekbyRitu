@@ -204,6 +204,14 @@ async function approvedProgrammeTerms(packageId = "inner-code") {
 }
 async function requireFullPayment(id) {
   const p = (await stateRead()).programmes[id];
+  if (
+    globalThis.innerCodePackages.fullPayment(p) &&
+    p?.status === "Not Activated"
+  )
+    fail(
+      403,
+      "Account access follows questionnaire completion, plan preparation and plan-review approval.",
+    );
   if (!globalThis.innerCodePackages.paid(p))
     fail(
       403,
@@ -703,7 +711,12 @@ async function ensureAccounts(s) {
 }
 async function financialRecord(s, id, kind, stage) {
   const cfg = globalThis.innerCodePackages.get(s.programmes[id]);
-  if (!cfg.deposit) stage = "balance";
+  if (
+    globalThis.innerCodePackages.fullPayment(s.programmes[id]) &&
+    kind !== "agreement"
+  )
+    stage = "full";
+  else if (!cfg.deposit) stage = "balance";
   const finalTerms = await approvedProgrammeTerms(cfg.id);
   const templateRows = await db.query(
     "SELECT payload FROM documents WHERE section='billing_catalogue' AND record_key=?",
@@ -763,10 +776,19 @@ async function financialRecord(s, id, kind, stage) {
     reference: displayReference,
     customerEmail: l.email,
     customerPhone: l.phone,
-    amount: stage === "deposit" ? cfg.deposit : cfg.balance,
+    amount:
+      stage === "full"
+        ? cfg.price
+        : stage === "deposit"
+          ? cfg.deposit
+          : cfg.balance,
     packageSnapshot: structuredClone(cfg),
     stage,
     paymentDetails: s.programmes[id]?.paymentDetails?.[stage],
+    programmeStart:
+      s.programmes[id]?.status === "Active"
+        ? s.programmes[id]?.start
+        : undefined,
     date:
       s.programmes[id]?.paymentDetails?.[stage]?.date ||
       (s.programmes[id]?.verifiedAt?.[stage]
@@ -781,7 +803,11 @@ async function financialRecord(s, id, kind, stage) {
           : "Payment instructions: " +
             (globalThis.innerCodePayments.instructions(
               cfg.id,
-              stage === "deposit" ? cfg.deposit : cfg.balance,
+              stage === "full"
+                ? cfg.price
+                : stage === "deposit"
+                  ? cfg.deposit
+                  : cfg.balance,
             ) ||
               process.env.PAYMENT_INSTRUCTIONS ||
               "Pending. Do not pay until final terms are agreed."),
@@ -924,7 +950,10 @@ async function prepareEmail(id, actor) {
   }
   if (
     ["first", "deposit", "questionnaire-reminder"].includes(e.type) ||
-    (e.type === "paid" && !cfg.walkthrough)
+    (e.type === "paid" &&
+      (!cfg.walkthrough ||
+        (globalThis.innerCodePackages.fullPayment(state.programmes[e.client]) &&
+          !state.workflow[e.client]?.walkthroughDone)))
   )
     link = await onboardingLink(e.client);
   const cleanBody = String(e.body || "")
@@ -964,14 +993,22 @@ async function prepareEmail(id, actor) {
       globalThis.coachingTime.display(state.workflow[e.client].booking);
   const attachments = [];
   if (["first", "balance"].includes(e.type)) {
-    const amount =
-      e.type === "balance" ? cfg.balance : cfg.deposit || cfg.balance;
+    const amount = globalThis.innerCodePackages.fullPayment(
+      state.programmes[e.client],
+    )
+      ? cfg.price
+      : e.type === "balance"
+        ? cfg.balance
+        : cfg.deposit || cfg.balance;
     const instructions = globalThis.programmeContent.payment(cfg.id, amount);
     if (instructions && !mail.text.includes(instructions))
       mail.text += "\n\nPayment Instructions\n" + instructions;
   }
-  const stage =
-    !cfg.deposit || ["balance", "paid"].includes(e.type)
+  const stage = globalThis.innerCodePackages.fullPayment(
+    state.programmes[e.client],
+  )
+    ? "full"
+    : !cfg.deposit || ["balance", "paid"].includes(e.type)
       ? "balance"
       : "deposit";
   if (
@@ -995,7 +1032,8 @@ async function prepareEmail(id, actor) {
   }
   if (e.type === "first")
     attachments.push({
-      filename: cfg.deposit ? "deposit-invoice.pdf" : "invoice.pdf",
+      filename:
+        cfg.deposit && stage !== "full" ? "deposit-invoice.pdf" : "invoice.pdf",
       content: (
         await pdfDocument(
           await financialRecord(state, e.client, "invoice", stage),
@@ -1896,8 +1934,50 @@ const server = http.createServer(async (req, res) => {
                       globalThis.innerCodePackages.get(packageId),
                     );
 
+              const full = p.paymentOption === "full";
+              if (full && packageId !== "inner-code")
+                fail(
+                  400,
+                  "Full payment option is only available for Canada Premium.",
+                );
+              if (
+                previous &&
+                (previous.deposit || previous.balance) &&
+                (previous.paymentOption || "standard") !==
+                  (p.paymentOption || "standard")
+              )
+                fail(
+                  409,
+                  "Payment option cannot change after payment verification.",
+                );
+              if (
+                full &&
+                p.status === "Active" &&
+                (!next.intakes[id]?.submitted ||
+                  !next.workflow?.[id]?.planReady ||
+                  !next.workflow?.[id]?.walkthroughDone ||
+                  !p.agreed)
+              )
+                fail(
+                  409,
+                  "Complete the questionnaire, plan preparation, plan review and approval before activation.",
+                );
+              if (full && (p.deposit || p.balance || p.full)) {
+                if (
+                  !p.full ||
+                  !p.deposit ||
+                  !p.balance ||
+                  !p.paymentDetails?.full?.reference ||
+                  !p.paymentDetails?.full?.date ||
+                  !p.paymentDetails?.full?.method
+                )
+                  fail(
+                    400,
+                    "Record and verify the single CAD 500 payment with its payment details.",
+                  );
+              }
               p.verifiedAt = { ...(old.programmes[id]?.verifiedAt || {}) };
-              for (const stage of ["deposit", "balance"])
+              for (const stage of ["deposit", "balance", "full", "agreed"])
                 if (p[stage] && !old.programmes[id]?.[stage])
                   p.verifiedAt[stage] = new Date().toISOString();
             }
@@ -1996,8 +2076,13 @@ const server = http.createServer(async (req, res) => {
         const u = new URL(req.url, "http://localhost"),
           id = u.searchParams.get("client"),
           kind = path.split("/").pop(),
-          stage =
-            u.searchParams.get("stage") === "balance" ? "balance" : "deposit";
+          stage = globalThis.innerCodePackages.fullPayment(
+            (await stateRead()).programmes[u.searchParams.get("client")],
+          )
+            ? "full"
+            : u.searchParams.get("stage") === "balance"
+              ? "balance"
+              : "deposit";
         if (a.role !== "coach" && a.id !== id) fail(403, "Access denied");
         const s = await stateRead(),
           l = s.leads.find((l) => l.id === id);

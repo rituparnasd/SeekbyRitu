@@ -247,7 +247,7 @@
   const payment = (id, amount) => {
     const p = get(id);
     if (!p) return "";
-    if (id === "inner-code" && [150, 350].includes(Number(amount)))
+    if (id === "inner-code" && [150, 350, 500].includes(Number(amount)))
       return `Send CAD ${amount} by Interac e-Transfer to ${email}.\nInclude your full name and registration email.${Number(amount) === 150 ? " The deposit is included in the CAD 500 total." : ""}`;
     const url = globalThis.innerCodePayments?.url(id, amount);
     return url
