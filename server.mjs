@@ -1,3 +1,4 @@
+import { readiness } from "./lib/readiness.mjs";
 import { habitStatuses } from "./lib/client-records.mjs";
 import { addTestClient } from "./lib/test-client.mjs";
 import { LoginLimiter } from "./lib/login-limiter.mjs";
@@ -987,14 +988,13 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("Strict-Transport-Security", "max-age=31536000");
   const path = new URL(req.url, "http://localhost").pathname;
   try {
-    const finalTerms = db ? await approvedProgrammeTerms() : "";
+    if (path === "/health") {
+      const result = await readiness(db);
+      return json(res, result.status, result.body);
+    }
     if (path === "/api/timezones" && req.method === "GET")
       return json(res, 200, { rules: timezoneRules });
-    if (path === "/health")
-      return json(res, 200, {
-        status: db ? "ok" : "setup_required",
-        ready: !!db,
-      });
+    const finalTerms = db ? await approvedProgrammeTerms() : "";
     if (path === "/api/config") {
       const owner = db
         ? (await db.query("SELECT id FROM accounts")).length > 0

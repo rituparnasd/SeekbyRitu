@@ -274,6 +274,7 @@ test("empty live workspace, authenticated lead creation and responsive layout", 
             fullPage: true,
           });
       }
+      await page.waitForFunction(() => billingData !== null);
       await page.evaluate(() => {
         state.view = "billing";
         documentEditor = newBillingDraft();
